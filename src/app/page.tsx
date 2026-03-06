@@ -522,7 +522,7 @@ export default function HomePage() {
       {/* ── Features ── */}
       <section id="fitur" style={{position:"relative",zIndex:10,padding:"100px 56px",background:C.hitam}}>
         <RevealDiv>
-          <SectionHeader tag="Fitur Utama" title="Temukan" gold="Warisan Anda" sub="Alat lengkap untuk menjelajahi dan melestarikan silsilah keluarga"/>
+          <SectionHeader tag="Fitur Utama" title="Temukan" gold="Silsilah Anda" sub="Alat lengkap untuk menjelajahi dan melestarikan silsilah keluarga"/>
           <div className="feat-grid" style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:2,maxWidth:1050,margin:"0 auto"}}>
             {features.map((f,i) => (
               <div key={i} className="feat-card" style={{position:"relative",background:C.hitamL,padding:"44px 32px",border:`1px solid rgba(201,168,76,.08)`,transition:"all .35s",overflow:"hidden"}}>

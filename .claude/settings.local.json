@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__ide__getDiagnostics",
+      "mcp__Neon__list_projects",
+      "mcp__Neon__get_connection_string",
+      "Bash(npx prisma:*)",
+      "mcp__Neon__run_sql",
+      "Bash(npm run:*)",
+      "Bash(gh:*)"
+    ]
+  }
+}
