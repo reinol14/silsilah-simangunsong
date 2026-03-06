@@ -1,8 +1,59 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Features
+
+- 📊 **Silsilah Tree Visualization** - Interactive family tree visualization
+- 👤 **Profile Pages** - Detailed profile for each family member with AI-generated biography
+- ✨ **AI-Powered Bio** - Generate personalized biography using GitHub Models AI
+- ➕ **Add Members** - Complex form to add family members with relationships
+- 🔍 **Smart Search** - Search family members by name or birthplace
+
 ## Getting Started
 
-First, run the development server:
+### 1. Install Dependencies
+
+```bash
+npm install
+```
+
+### 2. Setup Environment Variables
+
+Copy `.env.example` to `.env`:
+
+```bash
+cp .env.example .env
+```
+
+Then edit `.env` and fill in:
+
+```env
+# Database connection
+DATABASE_URL="mysql://user:password@localhost:3306/silsilah_simangunsong"
+
+# GitHub Models API (for AI-generated bio)
+GITHUB_TOKEN="ghp_your_github_token_here"
+```
+
+**To get GitHub Token:**
+1. Go to https://github.com/settings/tokens
+2. Click "Generate new token" → "Generate new token (classic)"
+3. Give it a name: "Silsilah AI Bio"
+4. Select scopes: `read:user`, `repo`
+5. Click "Generate token" and copy it to your `.env` file
+
+### 3. Setup Database
+
+Make sure MySQL is running, then:
+
+```bash
+# Push schema to database
+npx prisma db push
+
+# (Optional) Seed initial data
+npx prisma db seed
+```
+
+### 4. Run Development Server
 
 ```bash
 npm run dev

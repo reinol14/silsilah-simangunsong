@@ -1,0 +1,11 @@
+body{
+  font-family: Arial, sans-serif;
+}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+.header-gorga{
+  border-bottom:6px solid #8b0000;
+  background-image:url("/gorga.png");
+  background-size:200px;
+}

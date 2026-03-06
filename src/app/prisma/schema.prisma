@@ -1,0 +1,58 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Person {
+  id            Int          @id @default(autoincrement())
+  nama          String
+  jenisKelamin  JenisKelamin
+  tanggalLahir  DateTime?
+  tanggalWafat  DateTime?
+  tempatLahir   String?
+  foto          String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  marriagesAsHusband Marriage[] @relation("Husband")
+  marriagesAsWife    Marriage[] @relation("Wife")
+  childRecords       Child[]
+
+  @@map("person")
+}
+
+model Marriage {
+  id             Int       @id @default(autoincrement())
+  husbandId      Int
+  wifeId         Int
+  tanggalMenikah DateTime?
+  createdAt      DateTime  @default(now())
+
+  husband  Person  @relation("Husband", fields: [husbandId], references: [id])
+  wife     Person  @relation("Wife",    fields: [wifeId],    references: [id])
+  children Child[]
+
+  @@map("marriage")
+}
+
+model Child {
+  id         Int @id @default(autoincrement())
+  marriageId Int
+  personId   Int
+
+  marriage Marriage @relation(fields: [marriageId], references: [id])
+  person   Person   @relation(fields: [personId],   references: [id])
+
+  @@map("child")
+}
+
+enum JenisKelamin {
+  LAKI_LAKI
+  PEREMPUAN
+}
