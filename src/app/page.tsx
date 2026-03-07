@@ -454,7 +454,7 @@ export default function HomePage() {
             {/* Photo */}
             <div className="hero-photo-img" style={{position:"relative",width:"clamp(180px,20vw,240px)",overflow:"hidden",border:`1px solid rgba(201,168,76,0.35)`,boxShadow:`0 0 0 4px rgba(13,11,8,0.9),0 0 0 5px rgba(201,168,76,0.15),0 24px 60px rgba(0,0,0,0.7),0 0 80px rgba(139,26,26,0.2)`}}>
               <div style={{position:"absolute",inset:0,zIndex:1,background:"linear-gradient(to bottom,rgba(13,11,8,0.2) 0%,transparent 25%,transparent 70%,rgba(13,11,8,0.4) 100%)",pointerEvents:"none"}}/>
-              <img src="/kosmos.png" alt="Kosmas Simangunsong" style={{display:"block",width:"100%",height:"auto",objectFit:"cover",filter:"sepia(10%) contrast(1.05) brightness(0.93)"}}/>
+              <img src="/kosmos final.png" alt="Kosmas Simangunsong" style={{display:"block",width:"100%",height:"auto",objectFit:"cover",filter:"sepia(10%) contrast(1.05) brightness(0.93)"}}/>
             </div>
             {/* Caption */}
             <div style={{marginTop:18,textAlign:"center",borderTop:`1px solid rgba(201,168,76,0.2)`,paddingTop:10}}>
