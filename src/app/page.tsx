@@ -20,6 +20,14 @@ interface Person {
   tempatLahir:  string | null;
 }
 
+interface Donatur {
+  id:       number;
+  nama:     string;
+  nominal:  number;
+  pesan:    string | null;
+  tanggal:  string;
+}
+
 // ─── Palette ──────────────────────────────────────────────────────────────────
 const C = {
   merah:       "#8B1A1A",
@@ -247,6 +255,7 @@ export default function HomePage() {
   const [scrolled,   setScrolled]   = useState(false);
   const [stats,      setStats]      = useState<Stats | null>(null);
   const [persons,    setPersons]    = useState<Person[]>([]);
+  const [donaturs,   setDonaturs]   = useState<Donatur[]>([]);
   const [loadingStats, setLoadingStats] = useState(true);
   const [loadingPersons, setLoadingPersons] = useState(true);
   const [statsActive, setStatsActive] = useState(false);
@@ -275,6 +284,14 @@ export default function HomePage() {
       .then(res => { if (res.success) setPersons(res.data); })
       .catch(console.error)
       .finally(() => setLoadingPersons(false));
+  }, []);
+
+  // Fetch donatur dari API
+  useEffect(() => {
+    fetch("/api/donatur")
+      .then(r => r.json())
+      .then(res => { if (res.success) setDonaturs(res.data); })
+      .catch(console.error);
   }, []);
 
   // IntersectionObserver untuk stats counter
@@ -677,6 +694,63 @@ export default function HomePage() {
           </div>
         </RevealDiv>
       </section>
+
+      {/* ── Daftar Donatur ── */}
+      {donaturs.length > 0 && (
+        <section style={{position:"relative",zIndex:10,padding:"80px 56px",background:C.hitamL,borderTop:`1px solid rgba(201,168,76,.08)`}}>
+          <RevealDiv>
+            <SectionHeader
+              tag="Para Donatur"
+              title="Mereka yang"
+              gold="Mendukung"
+              sub="Terima kasih atas dukungan keluarga Simangunsong di seluruh penjuru dunia"
+            />
+            <div className="donate-grid" style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,maxWidth:960,margin:"0 auto"}}>
+              {donaturs.map((d,i) => (
+                <div key={d.id} className="donate-card" style={{
+                  background:"rgba(13,11,8,.7)",
+                  border:`1px solid rgba(201,168,76,.12)`,
+                  padding:"22px 24px",
+                  position:"relative",
+                  overflow:"hidden",
+                  transition:"transform .3s",
+                  animationDelay:`${i*0.05}s`,
+                }}>
+                  {/* accent atas */}
+                  <div style={{position:"absolute",top:0,left:0,right:0,height:2,background:`linear-gradient(90deg,${C.merahTua},${C.emas},${C.merahTua})`,opacity:.6}}/>
+                  {/* Nomor urut */}
+                  <div style={{position:"absolute",top:10,right:14,fontFamily:"'Cinzel Decorative',cursive",fontSize:"2.2rem",color:"rgba(201,168,76,.055)",fontWeight:900,lineHeight:1,pointerEvents:"none"}}>
+                    {String(i+1).padStart(2,"0")}
+                  </div>
+                  {/* Ikon hati kecil */}
+                  <div style={{marginBottom:10}}>
+                    <svg width="18" height="16" viewBox="0 0 24 22" fill={C.merah} opacity={.7}>
+                      <path d="M12 21.593c-5.63-5.539-11-10.297-11-14.402C1 3.748 3.748 1 7.191 1c1.947 0 3.788.824 4.809 2.152C13.021 1.824 14.862 1 16.809 1 20.252 1 23 3.748 23 7.191c0 4.105-5.37 8.863-11 14.402z"/>
+                    </svg>
+                  </div>
+                  <p style={{fontFamily:"'Cinzel',serif",fontSize:"0.88rem",color:C.putih,letterSpacing:"0.04em",marginBottom:4,lineHeight:1.3}}>
+                    {d.nama}
+                  </p>
+                  <p style={{fontFamily:"'Cinzel Decorative',cursive",fontSize:"0.82rem",color:C.emas,marginBottom:d.pesan?8:0}}>
+                    {new Intl.NumberFormat("id-ID",{style:"currency",currency:"IDR",maximumFractionDigits:0}).format(d.nominal)}
+                  </p>
+                  {d.pesan && (
+                    <p style={{fontFamily:"'IM Fell English',serif",fontStyle:"italic",fontSize:"0.78rem",color:C.kremT,opacity:.6,lineHeight:1.55,borderTop:`1px solid rgba(201,168,76,.08)`,paddingTop:8,marginTop:2}}>
+                      &ldquo;{d.pesan}&rdquo;
+                    </p>
+                  )}
+                  <p style={{marginTop:6,fontFamily:"'Cinzel',serif",fontSize:"0.52rem",letterSpacing:"0.15em",textTransform:"uppercase",color:C.emasT,opacity:.45}}>
+                    {new Date(d.tanggal).toLocaleDateString("id-ID",{day:"numeric",month:"short",year:"numeric"})}
+                  </p>
+                </div>
+              ))}
+            </div>
+            <p style={{textAlign:"center",marginTop:36,fontFamily:"'IM Fell English',serif",fontStyle:"italic",fontSize:"0.88rem",color:C.emasT,opacity:.55}}>
+              Ingin nama Anda tercantum di sini? Hubungi kami setelah berdonasi.
+            </p>
+          </RevealDiv>
+        </section>
+      )}
 
             {/* ── CTA ──
       <section id="tentang" style={{position:"relative",zIndex:10,padding:"120px 40px",textAlign:"center",background:C.hitamL,overflow:"hidden"}}>

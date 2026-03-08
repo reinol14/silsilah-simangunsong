@@ -139,6 +139,7 @@ export default function AdminDashboard() {
     { href: "/person", label: "Kelola Anggota", icon: "📋", desc: "Edit & hapus data anggota" },
     { href: "/tarombo", label: "Pohon Silsilah", icon: "🌳", desc: "Visualisasi tarombo keluarga" },
     { href: "/admin/urutan-anak", label: "Urutan Anak", icon: "🔢", desc: "Atur urutan anak ke-1, ke-2, dst dalam setiap pernikahan" },
+    { href: "/admin/donatur", label: "Kelola Donatur", icon: "💛", desc: "Tambah & kelola data donatur yang ditampilkan di halaman depan" },
   ];
 
   return (

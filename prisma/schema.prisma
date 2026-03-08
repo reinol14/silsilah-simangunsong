@@ -76,3 +76,16 @@ enum Gender {
   LAKI_LAKI
   PEREMPUAN
 }
+
+model Donatur {
+  id        Int      @id @default(autoincrement())
+  nama      String
+  nominal   Int
+  pesan     String?
+  tanggal   DateTime
+  tampilkan Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("donatur")
+}
