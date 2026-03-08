@@ -138,6 +138,7 @@ export default function AdminDashboard() {
     { href: "/tambah", label: "Tambah Anggota", icon: "👤", desc: "Daftarkan anggota baru ke silsilah" },
     { href: "/person", label: "Kelola Anggota", icon: "📋", desc: "Edit & hapus data anggota" },
     { href: "/tarombo", label: "Pohon Silsilah", icon: "🌳", desc: "Visualisasi tarombo keluarga" },
+    { href: "/admin/urutan-anak", label: "Urutan Anak", icon: "🔢", desc: "Atur urutan anak ke-1, ke-2, dst dalam setiap pernikahan" },
   ];
 
   return (
@@ -152,6 +153,26 @@ export default function AdminDashboard() {
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         .menu-card:hover { border-color: rgba(201,168,76,.35)!important; transform: translateY(-3px); }
         .btn-logout:hover { background: rgba(192,57,43,.2)!important; border-color: ${C.merahTerang}!important; }
+        @media (max-width: 640px) {
+          .adm-nav  { padding: 12px 16px !important; }
+          .adm-logo { font-size: 0.75rem !important; }
+          .adm-logo-sub { display: none !important; }
+          .adm-nama { display: none !important; }
+          .adm-wrap { padding: 32px 16px 64px !important; }
+          .adm-title { font-size: clamp(1.6rem,7vw,2.2rem) !important; }
+          .adm-stats { grid-template-columns: repeat(3, 1fr) !important; gap: 10px !important; }
+          .adm-stat-val { font-size: 1.8rem !important; }
+          .adm-menu  { grid-template-columns: 1fr !important; gap: 14px !important; }
+          .menu-card { padding: 24px 20px !important; }
+          .menu-icon { font-size: 2rem !important; margin-bottom: 10px !important; }
+          .menu-label { font-size: 1rem !important; }
+          .adm-info  { padding: 16px 18px !important; }
+        }
+        @media (min-width: 641px) and (max-width: 900px) {
+          .adm-nav  { padding: 14px 24px !important; }
+          .adm-wrap { padding: 48px 24px !important; }
+          .adm-menu { grid-template-columns: repeat(2, 1fr) !important; }
+        }
       `}</style>
 
       {/* Background pattern */}
@@ -162,8 +183,8 @@ export default function AdminDashboard() {
       }}/>
 
       {/* Navbar */}
-      <nav style={{
-        padding: "18px 56px",
+      <nav className="adm-nav" style={{
+        padding: "18px 48px",
         display: "flex",
         justifyContent: "space-between",
         alignItems: "center",
@@ -172,20 +193,25 @@ export default function AdminDashboard() {
         zIndex: 10,
         background: C.hitamL,
       }}>
-        <Link href="/" style={{
+        <Link href="/" className="adm-logo" style={{
           fontFamily: "'Cinzel Decorative',cursive",
-          fontSize: "1rem",
+          fontSize: "0.95rem",
           color: C.emas,
           textDecoration: "none",
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          maxWidth: "60vw",
         }}>
-          Silsilah <span style={{ color: C.merahTerang }}>Simangunsong</span>
+          Silsilah <span className="adm-logo-sub" style={{ color: C.merahTerang }}>Simangunsong</span>
         </Link>
-        <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
-          <span style={{
+        <div style={{ display: "flex", alignItems: "center", gap: 16, flexShrink: 0 }}>
+          <span className="adm-nama" style={{
             fontFamily: "'Cinzel',serif",
             fontSize: "0.7rem",
             color: C.kremT,
             letterSpacing: "0.1em",
+            whiteSpace: "nowrap",
           }}>
             {admin.nama}
           </span>
@@ -200,10 +226,11 @@ export default function AdminDashboard() {
               color: C.merahTerang,
               background: "transparent",
               border: `1px solid rgba(192,57,43,.3)`,
-              padding: "8px 18px",
+              padding: "10px 16px",
               cursor: "pointer",
               clipPath: "polygon(8px 0%,100% 0%,calc(100% - 8px) 100%,0% 100%)",
               transition: "all .3s",
+              minHeight: 44,
             }}
           >
             Keluar
@@ -212,7 +239,7 @@ export default function AdminDashboard() {
       </nav>
 
       {/* Main Content */}
-      <div style={{
+      <div className="adm-wrap" style={{
         maxWidth: 1200,
         margin: "0 auto",
         padding: "60px 40px",
@@ -221,9 +248,9 @@ export default function AdminDashboard() {
       }}>
         <div style={{ textAlign: "center", marginBottom: 48 }}>
           <UlosStripe />
-          <h1 style={{
+          <h1 className="adm-title" style={{
             fontFamily: "'Cinzel Decorative',cursive",
-            fontSize: "2.5rem",
+            fontSize: "clamp(1.8rem,5vw,2.5rem)",
             color: C.putih,
             marginBottom: 12,
           }}>
@@ -242,10 +269,10 @@ export default function AdminDashboard() {
 
         {/* Stats Cards */}
         {stats && (
-          <div style={{
+          <div className="adm-stats" style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-            gap: 20,
+            gridTemplateColumns: "repeat(3, 1fr)",
+            gap: 16,
             marginBottom: 48,
           }}>
             {[
@@ -262,7 +289,7 @@ export default function AdminDashboard() {
                   textAlign: "center",
                 }}
               >
-                <div style={{
+                <div className="adm-stat-val" style={{
                   fontFamily: "'Cinzel Decorative',cursive",
                   fontSize: "2.5rem",
                   color: stat.color,
@@ -286,10 +313,10 @@ export default function AdminDashboard() {
         )}
 
         {/* Menu Grid */}
-        <div style={{
+        <div className="adm-menu" style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-          gap: 24,
+          gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+          gap: 20,
         }}>
           {menuItems.map((item, i) => (
             <Link
@@ -299,7 +326,7 @@ export default function AdminDashboard() {
               style={{
                 background: C.hitamL,
                 border: `1px solid rgba(201,168,76,.15)`,
-                padding: "36px 32px",
+                padding: "32px 28px",
                 textDecoration: "none",
                 transition: "all .3s",
                 position: "relative",
@@ -308,21 +335,16 @@ export default function AdminDashboard() {
             >
               <div style={{
                 position: "absolute",
-                top: 0,
-                left: 0,
-                right: 0,
+                top: 0, left: 0, right: 0,
                 height: 3,
                 background: `linear-gradient(90deg,${C.merahTua},${C.emas},${C.merahTua})`,
               }}/>
-              <div style={{
-                fontSize: "3rem",
-                marginBottom: 16,
-              }}>
+              <div className="menu-icon" style={{ fontSize: "2.6rem", marginBottom: 14 }}>
                 {item.icon}
               </div>
-              <h3 style={{
+              <h3 className="menu-label" style={{
                 fontFamily: "'Cinzel',serif",
-                fontSize: "1.2rem",
+                fontSize: "1.1rem",
                 color: C.putih,
                 marginBottom: 8,
                 letterSpacing: "0.05em",
@@ -335,6 +357,7 @@ export default function AdminDashboard() {
                 fontSize: "0.95rem",
                 color: C.kremT,
                 opacity: .7,
+                lineHeight: 1.5,
               }}>
                 {item.desc}
               </p>
@@ -343,7 +366,7 @@ export default function AdminDashboard() {
         </div>
 
         {/* Info Box */}
-        <div style={{
+        <div className="adm-info" style={{
           marginTop: 48,
           background: "rgba(139,26,26,.1)",
           border: `1px solid rgba(201,168,76,.15)`,

@@ -16,6 +16,10 @@ export async function GET() {
           include: {
             person: true,
           },
+          orderBy: [
+            { urutanAnak: "asc" } as any,
+            { id: "asc" },
+          ],
         },
       },
       orderBy: { id: "asc" },

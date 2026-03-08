@@ -20,6 +20,10 @@ export async function GET(request: NextRequest) {
               select: { id: true, nama: true },
             },
           },
+          orderBy: [
+            { urutanAnak: "asc" } as any,
+            { id: "asc" },
+          ],
         },
       },
       orderBy: { createdAt: "desc" },

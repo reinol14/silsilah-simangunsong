@@ -12,7 +12,7 @@ interface Person {
 interface Marriage {
   id: number; husbandId: number; wifeId: number;
   husband: Person; wife: Person;
-  children: { id: number; personId: number; person: Person }[];
+  children: { id: number; personId: number; person: Person; urutanAnak?: number | null }[];
 }
 interface TaromboData {
   marriages: Marriage[]; allPersons: Person[]; rootPersons: Person[];
@@ -21,22 +21,24 @@ interface FamilyUnit {
   id: string; marriage?: Marriage; person?: Person;
   x: number; y: number; w: number; h: number;
   children: FamilyUnit[]; childPersonIds: number[];
+  urutanAnak?: number | null;
+  truncated?: boolean;
 }
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 const C = {
   merah:"#8B1A1A", merahTua:"#5C0E0E", merahTerang:"#C0392B",
-  emas:"#C9A84C",  emasM:"#E8CC7A",    emasT:"#8B6914",
-  hitam:"#0D0B08", hitamL:"#1A1612",
-  kremT:"#E8D9B8", putih:"#FDF8EE",
-  biru:"#7EB8D4",  pink:"#D4A0B5",
+  emas:"#C9A84C",  emasM:"#EDD485",    emasT:"#A07820",
+  hitam:"#110F0C", hitamL:"#1E1A14",
+  kremT:"#EEE0C4", putih:"#FDF8EE",
+  biru:"#88C4DE",  pink:"#DCA8BC",
 };
 
-const COUPLE_W = 280; const SINGLE_W = 160;
-const CARD_H = 90;    const H_GAP = 40; const V_GAP = 120;
+const COUPLE_W = 320; const SINGLE_W = 188;
+const CARD_H = 108;   const H_GAP = 52; const V_GAP = 144;
 
 // ─── Build layout ─────────────────────────────────────────────────────────────
-function buildLayout(data: TaromboData) {
+function buildLayout(data: TaromboData, maxDepth: number | null = null) {
   const marriageByHusband = new Map<number, Marriage>();
   const marriageByWife    = new Map<number, Marriage>();
   for (const m of data.marriages) {
@@ -46,20 +48,26 @@ function buildLayout(data: TaromboData) {
   const childPersonIds = new Set(data.marriages.flatMap(m => m.children.map(c => c.personId)));
   const roots = data.allPersons.filter(p => !childPersonIds.has(p.id));
 
-  function buildUnit(person: Person): FamilyUnit {
+  function buildUnit(person: Person, urutanAnak?: number | null, depth = 0): FamilyUnit {
+    if (maxDepth !== null && depth >= maxDepth) {
+      const m = marriageByHusband.get(person.id);
+      const mw = marriageByWife.get(person.id);
+      const hasHidden = (m && m.children.length > 0) || (!!(mw && !childPersonIds.has(mw.husbandId) && mw.children.length > 0));
+      return { id:`p-${person.id}`, person, x:0, y:0, w:SINGLE_W, h:CARD_H, children:[], childPersonIds:[], urutanAnak, truncated: hasHidden };
+    }
     const marriage = marriageByHusband.get(person.id);
     if (marriage) {
-      const childUnits = marriage.children.map(c => buildUnit(c.person));
-      return { id:`m-${marriage.id}`, marriage, x:0, y:0, w:COUPLE_W, h:CARD_H, children:childUnits, childPersonIds:marriage.children.map(c=>c.personId) };
+      const childUnits = marriage.children.map(c => buildUnit(c.person, c.urutanAnak, depth + 1));
+      return { id:`m-${marriage.id}`, marriage, x:0, y:0, w:COUPLE_W, h:CARD_H, children:childUnits, childPersonIds:marriage.children.map(c=>c.personId), urutanAnak };
     }
     // Jika perempuan: periksa apakah dia istri dalam suatu pernikahan
     // dimana suaminya bukan anak dari orang lain (suami eksternal/root)
     const marriageAsWife = marriageByWife.get(person.id);
     if (marriageAsWife && !childPersonIds.has(marriageAsWife.husbandId)) {
-      const childUnits = marriageAsWife.children.map(c => buildUnit(c.person));
-      return { id:`m-${marriageAsWife.id}`, marriage:marriageAsWife, x:0, y:0, w:COUPLE_W, h:CARD_H, children:childUnits, childPersonIds:marriageAsWife.children.map(c=>c.personId) };
+      const childUnits = marriageAsWife.children.map(c => buildUnit(c.person, c.urutanAnak, depth + 1));
+      return { id:`m-${marriageAsWife.id}`, marriage:marriageAsWife, x:0, y:0, w:COUPLE_W, h:CARD_H, children:childUnits, childPersonIds:marriageAsWife.children.map(c=>c.personId), urutanAnak };
     }
-    return { id:`p-${person.id}`, person, x:0, y:0, w:SINGLE_W, h:CARD_H, children:[], childPersonIds:[] };
+    return { id:`p-${person.id}`, person, x:0, y:0, w:SINGLE_W, h:CARD_H, children:[], childPersonIds:[], urutanAnak };
   }
 
   const rootUnits: FamilyUnit[] = roots.reduce((acc: FamilyUnit[], p) => {
@@ -125,18 +133,18 @@ function buildFocusLayout(data: TaromboData, targetPersonId: number) {
   }
   const childPersonIds = new Set(data.marriages.flatMap(m => m.children.map(c => c.personId)));
 
-  function buildSubUnit(person: Person): FamilyUnit {
+  function buildSubUnit(person: Person, urutanAnak?: number | null): FamilyUnit {
     const marriage = marriageByHusband.get(person.id);
     if (marriage) {
-      const childUnits = marriage.children.map(c => buildSubUnit(c.person));
-      return { id:`m-${marriage.id}`, marriage, x:0, y:0, w:COUPLE_W, h:CARD_H, children:childUnits, childPersonIds:marriage.children.map(c=>c.personId) };
+      const childUnits = marriage.children.map(c => buildSubUnit(c.person, c.urutanAnak));
+      return { id:`m-${marriage.id}`, marriage, x:0, y:0, w:COUPLE_W, h:CARD_H, children:childUnits, childPersonIds:marriage.children.map(c=>c.personId), urutanAnak };
     }
     const mw = marriageByWife.get(person.id);
     if (mw && !childPersonIds.has(mw.husbandId)) {
-      const childUnits = mw.children.map(c => buildSubUnit(c.person));
-      return { id:`m-${mw.id}`, marriage:mw, x:0, y:0, w:COUPLE_W, h:CARD_H, children:childUnits, childPersonIds:mw.children.map(c=>c.personId) };
+      const childUnits = mw.children.map(c => buildSubUnit(c.person, c.urutanAnak));
+      return { id:`m-${mw.id}`, marriage:mw, x:0, y:0, w:COUPLE_W, h:CARD_H, children:childUnits, childPersonIds:mw.children.map(c=>c.personId), urutanAnak };
     }
-    return { id:`p-${person.id}`, person, x:0, y:0, w:SINGLE_W, h:CARD_H, children:[], childPersonIds:[] };
+    return { id:`p-${person.id}`, person, x:0, y:0, w:SINGLE_W, h:CARD_H, children:[], childPersonIds:[], urutanAnak };
   }
 
   // Kumpulkan rantai leluhur (dari target ke atas)
@@ -229,52 +237,64 @@ function CoupleCard({ unit, selected, onSelect }: { unit: FamilyUnit; selected: 
   const { husband, wife } = marriage;
   const initH = husband.nama.split(" ").slice(0,2).map(w=>w[0]).join("");
   const initW = wife.nama.split(" ").slice(0,2).map(w=>w[0]).join("");
-  const short = (n:string, max=16) => n.length > max ? n.slice(0,max-1)+"…" : n;
+  const short = (n:string, max=17) => n.length > max ? n.slice(0,max-1)+"…" : n;
   return (
     <g transform={`translate(${x},${y})`} onClick={()=>onSelect(unit)} style={{cursor:"pointer"}} className="pnode">
-      {selected && <rect x={-4} y={-4} width={w+8} height={h+8} rx={4} fill="none" stroke={C.emas} strokeWidth="2" opacity=".85"/>}
-      <rect x={0} y={0} width={w} height={h} rx={3} fill={selected?"rgba(92,14,14,0.65)":"rgba(20,18,14,0.96)"} stroke={selected?C.emas:"rgba(201,168,76,0.28)"} strokeWidth="1"/>
-      <rect x={0} y={0} width={w} height={3} rx={3} fill={C.emas} opacity=".6"/>
-      <line x1={w/2} y1={8} x2={w/2} y2={h-8} stroke="rgba(201,168,76,0.2)" strokeWidth="1"/>
-      <rect x={0} y={3} width={3} height={h-3} fill={C.biru} opacity=".4"/>
-      <circle cx={26} cy={h/2} r={18} fill="rgba(13,11,8,.85)" stroke="rgba(126,184,212,.3)" strokeWidth="1"/>
-      {husband.foto ? <image href={husband.foto} x={8} y={h/2-18} width={36} height={36} preserveAspectRatio="xMidYMid slice"/> : <text x={26} y={h/2+5} textAnchor="middle" fill={C.biru} fontSize="11" fontFamily="'Cinzel Decorative',cursive" fontWeight="700">{initH}</text>}
-      <text x={50} y={h/2-6} fill={C.kremT} fontSize="9" fontFamily="'Cinzel',serif" fontWeight="600">{short(husband.nama,15)}</text>
-      <text x={50} y={h/2+6} fill={C.biru} fontSize="7" fontFamily="'Cinzel',serif" opacity=".8">SUAMI</text>
-      {husband.tanggalLahir && <text x={50} y={h/2+17} fill={C.emasT} fontSize="6.5" fontFamily="'IM Fell English',serif" fontStyle="italic">b.{new Date(husband.tanggalLahir).getFullYear()}</text>}
-      <text x={w/2} y={h/2+5} textAnchor="middle" fill={C.emas} fontSize="10" fontFamily="'Cinzel',serif" opacity=".7">✦</text>
-      <rect x={w-3} y={3} width={3} height={h-3} fill={C.pink} opacity=".4"/>
-      <circle cx={w-26} cy={h/2} r={18} fill="rgba(13,11,8,.85)" stroke="rgba(212,160,181,.3)" strokeWidth="1"/>
-      {wife.foto ? <image href={wife.foto} x={w-44} y={h/2-18} width={36} height={36} preserveAspectRatio="xMidYMid slice"/> : <text x={w-26} y={h/2+5} textAnchor="middle" fill={C.pink} fontSize="11" fontFamily="'Cinzel Decorative',cursive" fontWeight="700">{initW}</text>}
-      <text x={w/2+10} y={h/2-6} fill={C.kremT} fontSize="9" fontFamily="'Cinzel',serif" fontWeight="600" textAnchor="start">{short(wife.nama,15)}</text>
-      <text x={w/2+10} y={h/2+6} fill={C.pink} fontSize="7" fontFamily="'Cinzel',serif" opacity=".8" textAnchor="start">ISTRI</text>
-      {wife.tanggalLahir && <text x={w/2+10} y={h/2+17} fill={C.emasT} fontSize="6.5" fontFamily="'IM Fell English',serif" fontStyle="italic" textAnchor="start">b.{new Date(wife.tanggalLahir).getFullYear()}</text>}
+      {selected && <rect x={-5} y={-5} width={w+10} height={h+10} rx={5} fill="none" stroke={C.emas} strokeWidth="2.5" opacity=".9"/>}
+      <rect x={0} y={0} width={w} height={h} rx={4} fill={selected?"rgba(92,14,14,0.7)":"rgba(28,24,18,0.97)"} stroke={selected?C.emas:"rgba(201,168,76,0.42)"} strokeWidth="1.2"/>
+      <rect x={0} y={0} width={w} height={4} rx={4} fill={C.emas} opacity=".7"/>
+      <line x1={w/2} y1={10} x2={w/2} y2={h-10} stroke="rgba(201,168,76,0.22)" strokeWidth="1"/>
+      <rect x={0} y={4} width={4} height={h-4} fill={C.biru} opacity=".45"/>
+      <circle cx={30} cy={h/2} r={21} fill="rgba(10,8,5,.9)" stroke="rgba(126,184,212,.4)" strokeWidth="1.2"/>
+      {husband.foto ? <image href={husband.foto} x={9} y={h/2-21} width={42} height={42} preserveAspectRatio="xMidYMid slice"/> : <text x={30} y={h/2+5} textAnchor="middle" fill={C.biru} fontSize="13" fontFamily="'Cinzel Decorative',cursive" fontWeight="700">{initH}</text>}
+      <text x={58} y={h/2-8} fill={C.kremT} fontSize="11" fontFamily="'Cinzel',serif" fontWeight="600">{short(husband.nama,16)}</text>
+      <text x={58} y={h/2+6} fill={C.biru} fontSize="8.5" fontFamily="'Cinzel',serif" opacity=".85">SUAMI</text>
+      {husband.tanggalLahir && <text x={58} y={h/2+19} fill={C.emasT} fontSize="8" fontFamily="'IM Fell English',serif" fontStyle="italic">b.{new Date(husband.tanggalLahir).getFullYear()}</text>}
+      <text x={w/2} y={h/2+6} textAnchor="middle" fill={C.emas} fontSize="13" fontFamily="'Cinzel',serif" opacity=".75">✦</text>
+      <rect x={w-4} y={4} width={4} height={h-4} fill={C.pink} opacity=".45"/>
+      <circle cx={w-30} cy={h/2} r={21} fill="rgba(10,8,5,.9)" stroke="rgba(212,160,181,.4)" strokeWidth="1.2"/>
+      {wife.foto ? <image href={wife.foto} x={w-51} y={h/2-21} width={42} height={42} preserveAspectRatio="xMidYMid slice"/> : <text x={w-30} y={h/2+5} textAnchor="middle" fill={C.pink} fontSize="13" fontFamily="'Cinzel Decorative',cursive" fontWeight="700">{initW}</text>}
+      <text x={w/2+14} y={h/2-8} fill={C.kremT} fontSize="11" fontFamily="'Cinzel',serif" fontWeight="600" textAnchor="start">{short(wife.nama,16)}</text>
+      <text x={w/2+14} y={h/2+6} fill={C.pink} fontSize="8.5" fontFamily="'Cinzel',serif" opacity=".85" textAnchor="start">ISTRI</text>
+      {wife.tanggalLahir && <text x={w/2+14} y={h/2+19} fill={C.emasT} fontSize="8" fontFamily="'IM Fell English',serif" fontStyle="italic" textAnchor="start">b.{new Date(wife.tanggalLahir).getFullYear()}</text>}
       {unit.children.length > 0 && (<>
-        <rect x={w/2-18} y={h-16} width={36} height={14} rx={7} fill="rgba(139,26,26,0.7)" stroke="rgba(201,168,76,0.4)" strokeWidth=".8"/>
-        <text x={w/2} y={h-6} textAnchor="middle" fill={C.emasM} fontSize="7" fontFamily="'Cinzel',serif">{unit.children.length} anak</text>
+        <rect x={w/2-22} y={h-18} width={44} height={15} rx={7.5} fill="rgba(92,14,14,0.75)" stroke="rgba(201,168,76,0.45)" strokeWidth=".9"/>
+        <text x={w/2} y={h-7} textAnchor="middle" fill={C.emasM} fontSize="8.5" fontFamily="'Cinzel',serif">{unit.children.length} anak</text>
       </>)}
     </g>
   );
 }
 
 function SingleCard({ unit, selected, onSelect }: { unit: FamilyUnit; selected: boolean; onSelect: (u: FamilyUnit) => void }) {
-  const { x, y, w, h, person } = unit;
+  const { x, y, w, h, person, urutanAnak } = unit;
   if (!person) return null;
   const isLaki = person.jenisKelamin === "LAKI_LAKI";
   const accent = isLaki ? C.biru : C.pink;
   const initials = person.nama.split(" ").slice(0,2).map(n=>n[0]).join("");
-  const short = (n:string, max=18) => n.length>max ? n.slice(0,max-1)+"…" : n;
+  const short = (n:string, max=19) => n.length>max ? n.slice(0,max-1)+"…" : n;
   return (
     <g transform={`translate(${x},${y})`} onClick={()=>onSelect(unit)} style={{cursor:"pointer"}} className="pnode">
-      {selected && <rect x={-4} y={-4} width={w+8} height={h+8} rx={4} fill="none" stroke={C.emas} strokeWidth="2" opacity=".85"/>}
-      <rect x={0} y={0} width={w} height={h} rx={3} fill={selected?"rgba(92,14,14,0.65)":"rgba(20,18,14,0.96)"} stroke={selected?C.emas:`rgba(201,168,76,${isLaki?".32":".2"})`} strokeWidth="1"/>
-      <rect x={0} y={0} width={w} height={3} rx={3} fill={accent} opacity=".7"/>
-      <rect x={0} y={3} width={3} height={h-3} fill={accent} opacity=".35"/>
-      <circle cx={28} cy={h/2} r={20} fill="rgba(13,11,8,.85)" stroke="rgba(201,168,76,.2)" strokeWidth="1"/>
-      {person.foto ? <image href={person.foto} x={8} y={h/2-20} width={40} height={40} preserveAspectRatio="xMidYMid slice"/> : <text x={28} y={h/2+5} textAnchor="middle" fill={accent} fontSize="13" fontFamily="'Cinzel Decorative',cursive" fontWeight="700">{initials}</text>}
-      <text x={56} y={h/2-8} fill={C.kremT} fontSize="9.5" fontFamily="'Cinzel',serif" fontWeight="600">{short(person.nama)}</text>
-      <text x={56} y={h/2+5} fill={accent} fontSize="7.5" fontFamily="'Cinzel',serif" opacity=".85">{isLaki?"LAKI-LAKI":"PEREMPUAN"}</text>
-      {person.tanggalLahir && <text x={56} y={h/2+17} fill={C.emasT} fontSize="7" fontFamily="'IM Fell English',serif" fontStyle="italic">b.{new Date(person.tanggalLahir).getFullYear()}{person.tanggalWafat?` – ${new Date(person.tanggalWafat).getFullYear()}`:""}</text>}
+      {selected && <rect x={-5} y={-5} width={w+10} height={h+10} rx={5} fill="none" stroke={C.emas} strokeWidth="2.5" opacity=".9"/>}
+      <rect x={0} y={0} width={w} height={h} rx={4} fill={selected?"rgba(92,14,14,0.7)":"rgba(28,24,18,0.97)"} stroke={selected?C.emas:`rgba(201,168,76,${isLaki?".42":".3"})`} strokeWidth="1.2"/>
+      <rect x={0} y={0} width={w} height={4} rx={4} fill={accent} opacity=".75"/>
+      <rect x={0} y={4} width={4} height={h-4} fill={accent} opacity=".4"/>
+      <circle cx={32} cy={h/2} r={23} fill="rgba(10,8,5,.9)" stroke="rgba(201,168,76,.25)" strokeWidth="1.2"/>
+      {person.foto ? <image href={person.foto} x={9} y={h/2-23} width={46} height={46} preserveAspectRatio="xMidYMid slice"/> : <text x={32} y={h/2+6} textAnchor="middle" fill={accent} fontSize="15" fontFamily="'Cinzel Decorative',cursive" fontWeight="700">{initials}</text>}
+      <text x={63} y={h/2-9} fill={C.kremT} fontSize="11.5" fontFamily="'Cinzel',serif" fontWeight="600">{short(person.nama)}</text>
+      <text x={63} y={h/2+6} fill={accent} fontSize="9" fontFamily="'Cinzel',serif" opacity=".88">{isLaki?"LAKI-LAKI":"PEREMPUAN"}</text>
+      {person.tanggalLahir && <text x={63} y={h/2+20} fill={C.emasT} fontSize="8.5" fontFamily="'IM Fell English',serif" fontStyle="italic">b.{new Date(person.tanggalLahir).getFullYear()}{person.tanggalWafat?` – ${new Date(person.tanggalWafat).getFullYear()}`:""}</text>}
+      {urutanAnak != null && (
+        <>
+          <rect x={w-26} y={3} width={23} height={16} rx={8} fill="rgba(139,26,26,0.88)" stroke="rgba(201,168,76,0.55)" strokeWidth=".9"/>
+          <text x={w-14} y={14} textAnchor="middle" fill={C.emasM} fontSize="8.5" fontFamily="'Cinzel',serif" fontWeight="700">#{urutanAnak}</text>
+        </>
+      )}
+      {unit.truncated && (
+        <>
+          <rect x={w/2-18} y={h-16} width={36} height={13} rx={6.5} fill="rgba(201,168,76,0.2)" stroke="rgba(201,168,76,0.55)" strokeWidth=".9"/>
+          <text x={w/2} y={h-6} textAnchor="middle" fill={C.emas} fontSize="9" fontFamily="'Cinzel',serif">···</text>
+        </>
+      )}
     </g>
   );
 }
@@ -1101,9 +1121,11 @@ export default function TaromboPage() {
   const [transform,  setTransform]  = useState({x:60,y:60,scale:1});
   const [isMobile,   setIsMobile]   = useState(false);
   const [isAdmin,    setIsAdmin]    = useState(false);
-  const [focusPId,   setFocusPId]   = useState<number|null>(null);
-  const [focusPName, setFocusPName] = useState("");
-  const [showHint,   setShowHint]   = useState(true);
+  const [focusPId,        setFocusPId]        = useState<number|null>(null);
+  const [focusPName,      setFocusPName]      = useState("");
+  const [showHint,        setShowHint]        = useState(true);
+  const [showAllGenerasi, setShowAllGenerasi] = useState(false);
+  const MAX_GENERASI = 10;
 
   const isPanning    = useRef(false);
   const lastMouse    = useRef({x:0,y:0});
@@ -1160,8 +1182,14 @@ export default function TaromboPage() {
 
   const layout = useMemo(()=>{
     if (!data) return null;
-    return focusPId ? buildFocusLayout(data, focusPId) : buildLayout(data);
-  }, [data, focusPId]);
+    const maxDepth = (!focusPId && !showAllGenerasi) ? MAX_GENERASI : null;
+    return focusPId ? buildFocusLayout(data, focusPId) : buildLayout(data, maxDepth);
+  }, [data, focusPId, showAllGenerasi]);
+
+  const hasTruncated = useMemo(()=>{
+    if (!layout || showAllGenerasi || focusPId) return false;
+    return layout.allUnits.some(u => u.truncated);
+  }, [layout, showAllGenerasi, focusPId]);
 
   // Auto-fit saat mode fokus berubah
   useEffect(()=>{ didFit.current=false; setSelected(null); }, [focusPId]);
@@ -1239,7 +1267,7 @@ export default function TaromboPage() {
     setSelected(unit); setSearch(""); setShowSearch(false);
   },[layout]);
 
-  const focusBannerH = focusPId ? 36 : 0;
+  const focusBannerH = focusPId ? 36 : (hasTruncated || showAllGenerasi) ? 36 : 0;
   const topBarH = isMobile ? 56 : 64;
 
   return (
@@ -1252,13 +1280,14 @@ export default function TaromboPage() {
         @keyframes fadeIn {from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
         @keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
         @keyframes pulse  {0%,100%{opacity:.35}50%{opacity:1}}
-        .pnode:hover{filter:drop-shadow(0 0 10px rgba(201,168,76,.3))}
+        .pnode:hover{filter:drop-shadow(0 0 14px rgba(201,168,76,.45))}
+        .pnode rect:first-of-type{transition:fill .18s}
         .ctrl-btn:hover{background:rgba(201,168,76,.14)!important;color:${C.emas}!important;border-color:rgba(201,168,76,.4)!important}
         .srch-item:hover{background:rgba(201,168,76,.07)!important;color:${C.emas}!important}
         .gorga-bg{background-image:repeating-linear-gradient(45deg,${C.emas} 0,${C.emas} 1px,transparent 0,transparent 50%),repeating-linear-gradient(-45deg,${C.emas} 0,${C.emas} 1px,transparent 0,transparent 50%);background-size:28px 28px}
       `}</style>
 
-      <div className="gorga-bg" style={{position:"absolute",inset:0,opacity:.03,pointerEvents:"none"}}/>
+      <div className="gorga-bg" style={{position:"absolute",inset:0,opacity:.018,pointerEvents:"none"}}/>
 
       {/* ── Top Bar ── */}
       <div style={{
@@ -1415,16 +1444,16 @@ export default function TaromboPage() {
         {layout&&!loading&&(
           <svg width="100%" height="100%" style={{position:"absolute",inset:0}}>
             <defs>
-              <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(201,168,76,.04)" strokeWidth=".5"/>
+              <pattern id="grid" width="60" height="60" patternUnits="userSpaceOnUse">
+                <path d="M 60 0 L 0 0 0 60" fill="none" stroke="rgba(201,168,76,.03)" strokeWidth=".4"/>
               </pattern>
             </defs>
             <g transform={`translate(${transform.x},${transform.y}) scale(${transform.scale})`}>
               <rect x={-2000} y={-2000} width={layout.canvasW+4000} height={layout.canvasH+4000} fill="url(#grid)"/>
               {layout.edges.map((e,i)=>(
                 <line key={i} x1={e.x1} y1={e.y1} x2={e.x2} y2={e.y2}
-                  stroke="rgba(201,168,76,0.28)" strokeWidth="1.2"
-                  strokeDasharray={e.y1===e.y2?"4 3":undefined}/>
+                  stroke="rgba(201,168,76,0.45)" strokeWidth="1.6"
+                  strokeDasharray={e.y1===e.y2?"6 4":undefined}/>
               ))}
               {layout.allUnits.map(unit=>
                 unit.marriage
@@ -1482,6 +1511,42 @@ export default function TaromboPage() {
           <p style={{fontFamily:"'IM Fell English',serif",fontStyle:"italic",fontSize:isMobile?"0.56rem":"0.62rem",color:C.emasT,opacity:.65,marginTop:6,lineHeight:1.6}}>
             {isMobile?"Cubit = zoom · Geser = pan":"Scroll = zoom · Drag = geser"}<br/>Klik kartu = detail
           </p>
+        </div>
+      )}
+
+      {/* ── Generasi Banner ── */}
+      {hasTruncated && !focusPId && (
+        <div style={{
+          position:"absolute", top:topBarH, left:0, right:0, zIndex:24,
+          background:`rgba(13,11,8,.97)`, borderBottom:`1px solid rgba(201,168,76,.18)`,
+          padding:"7px 20px", display:"flex", alignItems:"center", gap:12,
+          animation:"fadeIn .22s ease",
+        }}>
+          <span style={{fontFamily:"'IM Fell English',serif",fontStyle:"italic",fontSize:"0.75rem",color:C.kremT,opacity:.7,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+            Menampilkan <span style={{color:C.emas,fontStyle:"normal"}}>{MAX_GENERASI} generasi pertama</span> · Masih ada generasi yang tersembunyi
+          </span>
+          <button onClick={()=>setShowAllGenerasi(true)} style={{
+            fontFamily:"'Cinzel',serif",fontSize:"0.55rem",letterSpacing:"0.15em",textTransform:"uppercase",
+            color:C.hitam,background:`linear-gradient(135deg,${C.emas},${C.emasM})`,
+            border:"none",padding:"5px 14px",cursor:"pointer",flexShrink:0,transition:"all .2s",whiteSpace:"nowrap",
+          }}>Muat Semua</button>
+        </div>
+      )}
+      {showAllGenerasi && !focusPId && (
+        <div style={{
+          position:"absolute", top:topBarH, left:0, right:0, zIndex:24,
+          background:`rgba(13,11,8,.97)`, borderBottom:`1px solid rgba(201,168,76,.18)`,
+          padding:"7px 20px", display:"flex", alignItems:"center", gap:12,
+          animation:"fadeIn .22s ease",
+        }}>
+          <span style={{fontFamily:"'IM Fell English',serif",fontStyle:"italic",fontSize:"0.75rem",color:C.kremT,opacity:.7,flex:1}}>
+            Menampilkan <span style={{color:C.emas,fontStyle:"normal"}}>semua generasi</span>
+          </span>
+          <button onClick={()=>setShowAllGenerasi(false)} style={{
+            fontFamily:"'Cinzel',serif",fontSize:"0.55rem",letterSpacing:"0.15em",textTransform:"uppercase",
+            color:C.kremT,background:"rgba(13,11,8,.5)",border:`1px solid rgba(201,168,76,.25)`,
+            padding:"5px 12px",cursor:"pointer",flexShrink:0,transition:"all .2s",whiteSpace:"nowrap",
+          }}>× Batasi {MAX_GENERASI} Generasi</button>
         </div>
       )}
 

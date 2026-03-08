@@ -90,6 +90,16 @@ export default function LoginPage() {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700;900&family=Cinzel:wght@400;600;700&family=IM+Fell+English:ital@0;1&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&display=swap');
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        @media (max-width: 480px) {
+          .lgn-nav  { padding: 12px 16px !important; }
+          .lgn-logo { font-size: 0.78rem !important; }
+          .lgn-logo-sub { display: none !important; }
+          .lgn-card-pad { padding: 32px 20px !important; }
+          .lgn-title { font-size: 1.6rem !important; }
+          .lgn-inp  { font-size: 16px !important; }
+          .lgn-btn  { min-height: 48px; font-size: 0.78rem !important; }
+          .lgn-back { font-size: 0.68rem !important; padding: 10px 14px !important; }
+        }
       `}</style>
 
       {/* Background pattern */}
@@ -100,8 +110,8 @@ export default function LoginPage() {
       }}/>
 
       {/* Navbar */}
-      <nav style={{
-        padding: "18px 56px",
+      <nav className="lgn-nav" style={{
+        padding: "16px 40px",
         display: "flex",
         justifyContent: "space-between",
         alignItems: "center",
@@ -109,15 +119,16 @@ export default function LoginPage() {
         position: "relative",
         zIndex: 10,
       }}>
-        <Link href="/" style={{
+        <Link href="/" className="lgn-logo" style={{
           fontFamily: "'Cinzel Decorative',cursive",
-          fontSize: "1rem",
+          fontSize: "0.95rem",
           color: C.emas,
           textDecoration: "none",
+          whiteSpace: "nowrap",
         }}>
-          Silsilah <span style={{ color: C.merahTerang }}>Simangunsong</span>
+          Silsilah <span className="lgn-logo-sub" style={{ color: C.merahTerang }}>Simangunsong</span>
         </Link>
-        <Link href="/" style={{
+        <Link href="/" className="lgn-back" style={{
           fontFamily: "'Cinzel',serif",
           fontSize: "0.65rem",
           letterSpacing: "0.2em",
@@ -125,6 +136,8 @@ export default function LoginPage() {
           color: C.kremT,
           textDecoration: "none",
           transition: "color .3s",
+          padding: "10px 0",
+          whiteSpace: "nowrap",
         }}>
           ← Kembali
         </Link>
@@ -153,10 +166,10 @@ export default function LoginPage() {
             background: `linear-gradient(90deg,${C.merahTua},${C.emas},${C.merahTua})`,
           }}/>
 
-          <div style={{ padding: "48px 40px" }}>
+          <div className="lgn-card-pad" style={{ padding: "44px 36px" }}>
             <UlosStripe />
-            
-            <h1 style={{
+
+            <h1 className="lgn-title" style={{
               fontFamily: "'Cinzel Decorative',cursive",
               fontSize: "2rem",
               color: C.putih,
@@ -215,9 +228,10 @@ export default function LoginPage() {
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   required
+                  className="lgn-inp"
                   style={{
                     width: "100%",
-                    padding: "12px 16px",
+                    padding: "13px 16px",
                     fontFamily: "'Cormorant Garamond',serif",
                     fontSize: "1rem",
                     color: C.putih,
@@ -248,9 +262,10 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
+                  className="lgn-inp"
                   style={{
                     width: "100%",
-                    padding: "12px 16px",
+                    padding: "13px 16px",
                     fontFamily: "'Cormorant Garamond',serif",
                     fontSize: "1rem",
                     color: C.putih,
@@ -267,6 +282,7 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={loading}
+                className="lgn-btn"
                 style={{
                   width: "100%",
                   fontFamily: "'Cinzel',serif",
@@ -275,15 +291,16 @@ export default function LoginPage() {
                   textTransform: "uppercase",
                   color: C.hitam,
                   fontWeight: 600,
-                  background: loading 
-                    ? "rgba(201,168,76,.5)" 
+                  background: loading
+                    ? "rgba(201,168,76,.5)"
                     : `linear-gradient(135deg,${C.emas} 0%,${C.emasM} 50%,${C.emas} 100%)`,
-                  padding: "14px",
+                  padding: "16px",
                   border: "none",
                   clipPath: "polygon(12px 0%,100% 0%,calc(100% - 12px) 100%,0% 100%)",
                   cursor: loading ? "not-allowed" : "pointer",
                   transition: "all .3s",
                   opacity: loading ? 0.7 : 1,
+                  minHeight: 48,
                 }}
               >
                 {loading ? "Memproses..." : "Masuk"}

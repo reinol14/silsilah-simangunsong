@@ -118,10 +118,11 @@ export async function POST(request: NextRequest) {
 
         // 4. Link anak-anak ke marriage ini
         if (childrenIds && Array.isArray(childrenIds) && childrenIds.length > 0) {
-          await tx.child.createMany({
-            data: childrenIds.map((childId: number) => ({
+          await (tx.child as any).createMany({
+            data: childrenIds.map((childId: number, idx: number) => ({
               marriageId: marriage!.id,
               personId: parseInt(childId.toString()),
+              urutanAnak: idx + 1,
             })),
             skipDuplicates: true,
           });

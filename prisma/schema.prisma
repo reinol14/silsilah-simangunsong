@@ -47,6 +47,7 @@ model Child {
 
   marriageId Int
   personId   Int
+  urutanAnak Int?
 
   marriage Marriage @relation(fields: [marriageId], references: [id])
   person   Person   @relation(fields: [personId], references: [id])
