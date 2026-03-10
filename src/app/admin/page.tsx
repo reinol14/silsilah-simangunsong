@@ -99,7 +99,7 @@ export default function AdminDashboard() {
 
   async function handleLogout() {
     try {
-      await fetch("/api/auth/logout", { method: "POST" });
+      await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
       router.push("/");
       router.refresh();
     } catch (error) {

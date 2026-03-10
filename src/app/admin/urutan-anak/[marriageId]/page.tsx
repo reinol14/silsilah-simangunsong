@@ -148,6 +148,7 @@ export default function UrutanAnakPage() {
       const res  = await fetch(`/api/marriage/${mId}/urutan-anak`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body:   JSON.stringify(updates),
       });
       const data = await res.json();

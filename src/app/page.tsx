@@ -259,6 +259,7 @@ export default function HomePage() {
   const [loadingStats, setLoadingStats] = useState(true);
   const [loadingPersons, setLoadingPersons] = useState(true);
   const [statsActive, setStatsActive] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const statsRef = useRef<HTMLDivElement>(null);
 
   // Scroll listener untuk navbar
@@ -266,6 +267,22 @@ export default function HomePage() {
     const fn = () => setScrolled(window.scrollY > 40);
     window.addEventListener("scroll", fn);
     return () => window.removeEventListener("scroll", fn);
+  }, []);
+
+  // Cek status login admin
+  useEffect(() => {
+    async function checkAuth() {
+      try {
+        const res = await fetch("/api/auth/me", { credentials: "include" });
+        const data = await res.json();
+        if (data.success) {
+          setIsAdmin(true);
+        }
+      } catch (err) {
+        // User belum login, tetap false
+      }
+    }
+    checkAuth();
   }, []);
 
   // Fetch stats dari API
@@ -446,9 +463,15 @@ export default function HomePage() {
             </li>
           ))}
         </ul>
-        <Link href="/login" className="btn-p" style={{...btnPrimary,fontSize:"0.65rem",padding:"9px 22px",clipPath:"polygon(8px 0%,100% 0%,calc(100% - 8px) 100%,0% 100%)"}}>
-          Masuk
-        </Link>
+        {isAdmin ? (
+          <Link href="/admin" className="btn-p" style={{...btnPrimary,fontSize:"0.65rem",padding:"9px 22px",clipPath:"polygon(8px 0%,100% 0%,calc(100% - 8px) 100%,0% 100%)"}}>
+            Dashboard
+          </Link>
+        ) : (
+          <Link href="/login" className="btn-p" style={{...btnPrimary,fontSize:"0.65rem",padding:"9px 22px",clipPath:"polygon(8px 0%,100% 0%,calc(100% - 8px) 100%,0% 100%)"}}>
+            Masuk
+          </Link>
+        )}
       </nav>
 
       {/* ── Hero ── */}

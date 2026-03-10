@@ -23,6 +23,7 @@ interface FamilyUnit {
   children: FamilyUnit[]; childPersonIds: number[];
   urutanAnak?: number | null;
   truncated?: boolean;
+  generasi?: number;
 }
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
@@ -92,6 +93,7 @@ function buildLayout(data: TaromboData, maxDepth: number | null = null) {
 
   function assignY(unit: FamilyUnit, depth: number) {
     unit.y = 80 + depth * (CARD_H + V_GAP);
+    unit.generasi = depth + 1; // Set generasi (dimulai dari 1)
     for (const child of unit.children) assignY(child, depth + 1);
   }
   for (const unit of rootUnits) assignY(unit, 0);
@@ -202,6 +204,7 @@ function buildFocusLayout(data: TaromboData, targetPersonId: number) {
 
   function assignY(unit: FamilyUnit, depth: number) {
     unit.y = 80 + depth * (CARD_H + V_GAP);
+    unit.generasi = depth + 1; // Set generasi (dimulai dari 1)
     for (const child of unit.children) assignY(child, depth + 1);
   }
   assignY(root, 0);
@@ -240,8 +243,8 @@ function CoupleCard({ unit, selected, onSelect }: { unit: FamilyUnit; selected: 
   const short = (n:string, max=17) => n.length > max ? n.slice(0,max-1)+"…" : n;
   return (
     <g transform={`translate(${x},${y})`} onClick={()=>onSelect(unit)} style={{cursor:"pointer"}} className="pnode">
-      {selected && <rect x={-5} y={-5} width={w+10} height={h+10} rx={5} fill="none" stroke={C.emas} strokeWidth="2.5" opacity=".9"/>}
-      <rect x={0} y={0} width={w} height={h} rx={4} fill={selected?"rgba(92,14,14,0.7)":"rgba(28,24,18,0.97)"} stroke={selected?C.emas:"rgba(201,168,76,0.42)"} strokeWidth="1.2"/>
+      {selected && <rect x={-5} y={-5} width={w+10} height={h+10} rx={5} fill="none" stroke={C.emas} strokeWidth="3" opacity="1"/>}
+      <rect x={0} y={0} width={w} height={h} rx={4} fill={selected?"rgba(92,14,14,0.95)":"rgba(28,24,18,0.97)"} stroke={selected?C.emas:"rgba(201,168,76,0.42)"} strokeWidth="1.2"/>
       <rect x={0} y={0} width={w} height={4} rx={4} fill={C.emas} opacity=".7"/>
       <line x1={w/2} y1={10} x2={w/2} y2={h-10} stroke="rgba(201,168,76,0.22)" strokeWidth="1"/>
       <rect x={0} y={4} width={4} height={h-4} fill={C.biru} opacity=".45"/>
@@ -261,6 +264,12 @@ function CoupleCard({ unit, selected, onSelect }: { unit: FamilyUnit; selected: 
         <rect x={w/2-22} y={h-18} width={44} height={15} rx={7.5} fill="rgba(92,14,14,0.75)" stroke="rgba(201,168,76,0.45)" strokeWidth=".9"/>
         <text x={w/2} y={h-7} textAnchor="middle" fill={C.emasM} fontSize="8.5" fontFamily="'Cinzel',serif">{unit.children.length} anak</text>
       </>)}
+      {unit.generasi && (
+        <>
+          <rect x={4} y={h-17} width={38} height={14} rx={7} fill="rgba(201,168,76,0.18)" stroke="rgba(201,168,76,0.4)" strokeWidth=".8"/>
+          <text x={23} y={h-7} textAnchor="middle" fill={C.emas} fontSize="7.5" fontFamily="'Cinzel',serif" fontWeight="600">G-{unit.generasi}</text>
+        </>
+      )}
     </g>
   );
 }
@@ -274,8 +283,8 @@ function SingleCard({ unit, selected, onSelect }: { unit: FamilyUnit; selected: 
   const short = (n:string, max=19) => n.length>max ? n.slice(0,max-1)+"…" : n;
   return (
     <g transform={`translate(${x},${y})`} onClick={()=>onSelect(unit)} style={{cursor:"pointer"}} className="pnode">
-      {selected && <rect x={-5} y={-5} width={w+10} height={h+10} rx={5} fill="none" stroke={C.emas} strokeWidth="2.5" opacity=".9"/>}
-      <rect x={0} y={0} width={w} height={h} rx={4} fill={selected?"rgba(92,14,14,0.7)":"rgba(28,24,18,0.97)"} stroke={selected?C.emas:`rgba(201,168,76,${isLaki?".42":".3"})`} strokeWidth="1.2"/>
+      {selected && <rect x={-5} y={-5} width={w+10} height={h+10} rx={5} fill="none" stroke={C.emas} strokeWidth="3" opacity="1"/>}
+      <rect x={0} y={0} width={w} height={h} rx={4} fill={selected?"rgba(92,14,14,0.95)":"rgba(28,24,18,0.97)"} stroke={selected?C.emas:`rgba(201,168,76,${isLaki?".42":".3"})`} strokeWidth="1.2"/>
       <rect x={0} y={0} width={w} height={4} rx={4} fill={accent} opacity=".75"/>
       <rect x={0} y={4} width={4} height={h-4} fill={accent} opacity=".4"/>
       <circle cx={32} cy={h/2} r={23} fill="rgba(10,8,5,.9)" stroke="rgba(201,168,76,.25)" strokeWidth="1.2"/>
@@ -293,6 +302,12 @@ function SingleCard({ unit, selected, onSelect }: { unit: FamilyUnit; selected: 
         <>
           <rect x={w/2-18} y={h-16} width={36} height={13} rx={6.5} fill="rgba(201,168,76,0.2)" stroke="rgba(201,168,76,0.55)" strokeWidth=".9"/>
           <text x={w/2} y={h-6} textAnchor="middle" fill={C.emas} fontSize="9" fontFamily="'Cinzel',serif">···</text>
+        </>
+      )}
+      {unit.generasi && (
+        <>
+          <rect x={4} y={h-17} width={38} height={14} rx={7} fill="rgba(201,168,76,0.18)" stroke="rgba(201,168,76,0.4)" strokeWidth=".8"/>
+          <text x={23} y={h-7} textAnchor="middle" fill={C.emas} fontSize="7.5" fontFamily="'Cinzel',serif" fontWeight="600">G-{unit.generasi}</text>
         </>
       )}
     </g>
@@ -326,6 +341,7 @@ function AddChildForm({ marriageId, husband, wife, onSuccess, onCancel }: {
       const res  = await fetch("/api/person/create-with-relations", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body:    JSON.stringify({
           nama:            form.nama.trim(),
           jenisKelamin:    form.jenisKelamin,
@@ -507,6 +523,7 @@ function InsertBetweenForm({ parentMarriage, targetPersonId, targetPersonNama, o
       const res = await fetch("/api/person/insert-between", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           parentMarriageId: parentMarriage.id,
           targetPersonId,
@@ -694,6 +711,7 @@ function AddSpouseForm({ person, onSuccess, onCancel }: {
       const res  = await fetch("/api/person/create-with-relations", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body:    JSON.stringify({
           nama:         form.nama.trim(),
           jenisKelamin: spouseGender,
@@ -841,7 +859,7 @@ function DetailPanel({ unit, onClose, isMobile, isAdmin, onDelete, onAddChildSuc
   const [insertBetweenTarget, setInsertBetweenTarget] = useState<{personId:number;personNama:string}|null>(null);
   const panelStyle: React.CSSProperties = isMobile ? {
     position:"fixed", bottom:0, left:0, right:0,
-    maxHeight:"68vh", overflowY:"auto",
+    maxHeight:"50vh", overflowY:"auto",
     background:C.hitamL, borderTop:`1px solid rgba(201,168,76,.3)`,
     borderLeft:`1px solid rgba(201,168,76,.15)`, borderRight:`1px solid rgba(201,168,76,.15)`,
     zIndex:40, boxShadow:"0 -12px 40px rgba(0,0,0,.9)",
@@ -907,6 +925,7 @@ function DetailPanel({ unit, onClose, isMobile, isAdmin, onDelete, onAddChildSuc
         <div style={{flex:1,minWidth:0}}>
           <p style={{fontFamily:"'Cinzel',serif",fontSize:"0.55rem",letterSpacing:"0.25em",textTransform:"uppercase",color:C.emasT,marginBottom:4}}>
             {isCouple?"Pasangan":(unit.person?.jenisKelamin==="LAKI_LAKI"?"Laki-laki":"Perempuan")}
+            {unit.generasi && <span style={{marginLeft:8,color:C.emas,fontWeight:600}}>• G-{unit.generasi}</span>}
           </p>
           <h3 style={{fontFamily:"'Cinzel Decorative',cursive",fontSize:"0.82rem",color:C.putih,lineHeight:1.35}}>
             {isCouple?unit.marriage!.husband.nama:unit.person!.nama}
@@ -1167,7 +1186,7 @@ export default function TaromboPage() {
   async function handleDelete(id: number, nama: string) {
     if (!confirm(`Yakin ingin menghapus "${nama}"?\nSemua relasi (pernikahan & anak) juga akan dihapus.`)) return;
     try {
-      const res  = await fetch(`/api/person/${id}`, { method: "DELETE" });
+      const res  = await fetch(`/api/person/${id}`, { method: "DELETE", credentials: "include" });
       const data = await res.json();
       if (data.success) {
         setSelected(null);
@@ -1227,7 +1246,20 @@ export default function TaromboPage() {
   const onMouseUp = useCallback(()=>{ isPanning.current=false; },[]);
   const onWheel   = useCallback((e:React.WheelEvent)=>{
     e.preventDefault();
-    setTransform(t=>({...t,scale:Math.min(2.5,Math.max(0.15,t.scale*(e.deltaY>0?.9:1.1)))}));
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    
+    // Posisi mouse relatif ke container
+    const mouseX = e.clientX;
+    const mouseY = e.clientY;
+    
+    setTransform(t => {
+      const newScale = Math.min(2.5, Math.max(0.15, t.scale * (e.deltaY > 0 ? 0.9 : 1.1)));
+      // Zoom relatif ke posisi mouse
+      const dx = mouseX - (mouseX - t.x) * (newScale / t.scale);
+      const dy = mouseY - (mouseY - t.y) * (newScale / t.scale);
+      return { scale: newScale, x: dx, y: dy };
+    });
   },[]);
 
   // Touch — pan + pinch zoom
@@ -1252,7 +1284,18 @@ export default function TaromboPage() {
       const dist=Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
       const ratio=dist/lastPinchD.current;
       lastPinchD.current=dist;
-      setTransform(t=>({...t,scale:Math.min(2.5,Math.max(0.15,t.scale*ratio))}));
+      
+      // Hitung center point dari 2 jari
+      const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+      const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+      
+      setTransform(t => {
+        const newScale = Math.min(2.5, Math.max(0.15, t.scale * ratio));
+        // Zoom relatif ke center point
+        const dx = centerX - (centerX - t.x) * (newScale / t.scale);
+        const dy = centerY - (centerY - t.y) * (newScale / t.scale);
+        return { scale: newScale, x: dx, y: dy };
+      });
     }
   },[]);
 

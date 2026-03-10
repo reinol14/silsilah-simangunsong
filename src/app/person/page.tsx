@@ -342,7 +342,7 @@ export default function PersonListPage() {
   async function handleDelete(id: number) {
     if (!confirm("Yakin ingin menghapus anggota ini?\nSemua data relasi juga akan dihapus.")) return;
     try {
-      const res  = await fetch(`/api/person/${id}`,{method:"DELETE"});
+      const res  = await fetch(`/api/person/${id}`,{method:"DELETE",credentials:"include"});
       const data = await res.json();
       if (data.success) fetchData(search,gender);
       else alert("Gagal menghapus: "+(data.message||"Terjadi kesalahan"));

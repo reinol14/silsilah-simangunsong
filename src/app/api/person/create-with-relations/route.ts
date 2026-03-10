@@ -3,9 +3,19 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { getSession } from "@/lib/auth";
 
 export async function POST(request: NextRequest) {
   try {
+    // Cek autentikasi admin
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json(
+        { success: false, message: "Unauthorized - Silakan login terlebih dahulu" },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
     const {
       // Data person

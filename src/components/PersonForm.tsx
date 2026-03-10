@@ -45,6 +45,7 @@ export default function PersonForm({ onSuccess, onCancel }: PersonFormProps) {
         headers: {
           "Content-Type": "application/json",
         },
+        credentials: "include",
         body: JSON.stringify({
           nama: formData.nama.trim(),
           jenisKelamin: formData.jenisKelamin,

@@ -132,6 +132,7 @@ export default function EditPersonPage() {
       const res  = await fetch(`/api/person/${id}`, {
         method:  "PUT",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body:    JSON.stringify({
           nama:         form.nama.trim(),
           jenisKelamin: form.jenisKelamin,

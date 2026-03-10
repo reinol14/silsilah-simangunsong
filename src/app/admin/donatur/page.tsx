@@ -92,7 +92,7 @@ export default function AdminDonaturPage() {
       const body = { ...form, nominal: Number(form.nominal) };
       const url = editId ? `/api/donatur/${editId}` : "/api/donatur";
       const method = editId ? "PUT" : "POST";
-      const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify(body) });
       const data = await res.json();
       if (data.success) {
         setMsg({ type: "ok", text: editId ? "Data diperbarui." : "Donatur ditambahkan." });
@@ -107,7 +107,7 @@ export default function AdminDonaturPage() {
   }
 
   async function handleDelete(id: number) {
-    const res = await fetch(`/api/donatur/${id}`, { method: "DELETE" });
+    const res = await fetch(`/api/donatur/${id}`, { method: "DELETE", credentials: "include" });
     const data = await res.json();
     if (data.success) {
       setMsg({ type: "ok", text: "Donatur dihapus." });

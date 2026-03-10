@@ -153,6 +153,7 @@ export default function ComplexPersonForm({ onSuccess, onCancel }: ComplexPerson
         const spouseResponse = await fetch("/api/person", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          credentials: "include",
           body: JSON.stringify({
             nama: newSpouseData.nama.trim(),
             jenisKelamin: spouseGender,
@@ -164,7 +165,7 @@ export default function ComplexPersonForm({ onSuccess, onCancel }: ComplexPerson
 
         const spouseResult = await spouseResponse.json();
         if (!spouseResponse.ok || !spouseResult.success) {
-          throw new Error("Gagal membuat data pasangan: " + (spouseResult.message || ""));
+          throw new Error(spouseResult.message || "Gagal membuat data pasangan");
         }
 
         finalSpouseId = spouseResult.data.id.toString();
@@ -174,6 +175,7 @@ export default function ComplexPersonForm({ onSuccess, onCancel }: ComplexPerson
       const response = await fetch("/api/person/create-with-relations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           nama: formData.nama.trim(),
           jenisKelamin: formData.jenisKelamin,
@@ -190,7 +192,9 @@ export default function ComplexPersonForm({ onSuccess, onCancel }: ComplexPerson
       });
 
       const result = await response.json();
-      if (!response.ok || !result.success) throw new Error(result.message || "Gagal menyimpan");
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || "Gagal menyimpan data");
+      }
 
       setSuccess("✓ Data berhasil disimpan!");
       if (onSuccess) setTimeout(() => onSuccess(), 1500);

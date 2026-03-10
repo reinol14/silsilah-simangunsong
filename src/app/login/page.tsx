@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, FormEvent } from "react";
+import { useState, useEffect, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -50,6 +50,28 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [checking, setChecking] = useState(true);
+
+  // Cek apakah sudah login, jika iya redirect ke dashboard
+  useEffect(() => {
+    async function checkAuth() {
+      try {
+        const res = await fetch("/api/auth/me", { credentials: "include" });
+        const data = await res.json();
+        if (data.success) {
+          // Sudah login, redirect ke admin
+          router.push("/admin");
+          return;
+        }
+      } catch (err) {
+        // Belum login atau error, lanjutkan ke halaman login
+        console.log("Not authenticated");
+      } finally {
+        setChecking(false);
+      }
+    }
+    checkAuth();
+  }, [router]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -60,6 +82,7 @@ export default function LoginPage() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ username, password }),
       });
 
@@ -77,6 +100,28 @@ export default function LoginPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  // Tampilkan loading saat mengecek status login
+  if (checking) {
+    return (
+      <div style={{
+        minHeight: "100vh",
+        background: C.hitam,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}>
+        <div style={{
+          fontFamily: "'Cinzel',serif",
+          fontSize: "0.9rem",
+          color: C.kremT,
+          letterSpacing: "0.2em",
+        }}>
+          Memeriksa...
+        </div>
+      </div>
+    );
   }
 
   return (

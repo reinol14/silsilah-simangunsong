@@ -159,11 +159,20 @@ export default function ProfilPage() {
   const [generating, setGenerating] = useState(false);
   const [error, setError]         = useState("");
   const [scrolled, setScrolled]   = useState(false);
+  const [isAdmin, setIsAdmin]     = useState(false);
 
   useEffect(() => {
     const fn = () => setScrolled(window.scrollY > 40);
     window.addEventListener("scroll", fn);
     return () => window.removeEventListener("scroll", fn);
+  }, []);
+
+  useEffect(() => {
+    // Check admin status
+    fetch("/api/auth/me", { credentials: "include" })
+      .then(res => res.json())
+      .then(data => { if (data.success) setIsAdmin(true); })
+      .catch(() => {});
   }, []);
 
   useEffect(() => { fetchPerson(); }, [params.id]);
@@ -182,7 +191,7 @@ export default function ProfilPage() {
   const handleGenerateBio = async () => {
     try {
       setGenerating(true); setError("");
-      const res    = await fetch(`/api/person/${params.id}/generate-bio`, { method: "POST" });
+      const res    = await fetch(`/api/person/${params.id}/generate-bio`, { method: "POST", credentials: "include" });
       const result = await res.json();
       if (result.success) setPerson(prev => prev ? { ...prev, bio: result.data.bio } : null);
       else setError(result.message || "Gagal generate bio");
@@ -528,28 +537,30 @@ export default function ProfilPage() {
                 </h2>
               </div>
 
-              {/* Generate button */}
-              <button
-                onClick={handleGenerateBio}
-                disabled={generating}
-                className="generate-btn"
-                style={{
-                  fontFamily: "'Cinzel',serif", fontSize: "0.6rem", letterSpacing: "0.18em", textTransform: "uppercase",
-                  color: generating ? C.emasT : C.hitam,
-                  background: generating
-                    ? "rgba(201,168,76,.12)"
-                    : `linear-gradient(135deg,${C.emas} 0%,${C.emasM} 50%,${C.emas} 100%)`,
-                  border: generating ? `1px solid rgba(201,168,76,.2)` : "none",
-                  padding: "12px 24px", cursor: generating ? "not-allowed" : "pointer",
-                  clipPath: "polygon(10px 0%,100% 0%,calc(100% - 10px) 100%,0% 100%)",
-                  transition: "all .3s", display: "flex", alignItems: "center", gap: 8, flexShrink: 0,
-                }}
-              >
-                {generating && (
-                  <div style={{ width: 12, height: 12, border: `1.5px solid rgba(201,168,76,.3)`, borderTopColor: C.emas, borderRadius: "50%", animation: "spin .8s linear infinite" }} />
-                )}
-                {generating ? "Generating..." : person.bio ? "Generate Ulang" : "✦ Generate Bio AI"}
-              </button>
+              {/* Generate button - Admin only */}
+              {isAdmin && (
+                <button
+                  onClick={handleGenerateBio}
+                  disabled={generating}
+                  className="generate-btn"
+                  style={{
+                    fontFamily: "'Cinzel',serif", fontSize: "0.6rem", letterSpacing: "0.18em", textTransform: "uppercase",
+                    color: generating ? C.emasT : C.hitam,
+                    background: generating
+                      ? "rgba(201,168,76,.12)"
+                      : `linear-gradient(135deg,${C.emas} 0%,${C.emasM} 50%,${C.emas} 100%)`,
+                    border: generating ? `1px solid rgba(201,168,76,.2)` : "none",
+                    padding: "12px 24px", cursor: generating ? "not-allowed" : "pointer",
+                    clipPath: "polygon(10px 0%,100% 0%,calc(100% - 10px) 100%,0% 100%)",
+                    transition: "all .3s", display: "flex", alignItems: "center", gap: 8, flexShrink: 0,
+                  }}
+                >
+                  {generating && (
+                    <div style={{ width: 12, height: 12, border: `1.5px solid rgba(201,168,76,.3)`, borderTopColor: C.emas, borderRadius: "50%", animation: "spin .8s linear infinite" }} />
+                  )}
+                  {generating ? "Generating..." : person.bio ? "Generate Ulang" : "✦ Generate Bio AI"}
+                </button>
+              )}
             </div>
 
             {/* Error */}
@@ -591,7 +602,10 @@ export default function ProfilPage() {
                   </svg>
                 </div>
                 <p style={{ fontFamily: "'IM Fell English',serif", fontStyle: "italic", fontSize: "1rem", color: C.emasT, margin: 0, opacity: .6 }}>
-                  Belum ada biografi. Gunakan tombol di atas untuk generate otomatis dengan AI.
+                  {isAdmin 
+                    ? "Belum ada biografi. Gunakan tombol di atas untuk generate otomatis dengan AI."
+                    : "Belum ada biografi yang tersedia untuk profil ini."
+                  }
                 </p>
               </div>
             )}
