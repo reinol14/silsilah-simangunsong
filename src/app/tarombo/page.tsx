@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 
@@ -1398,7 +1398,7 @@ function DetailPanel({ unit, allMarriages, onClose, isMobile, isAdmin, onDelete,
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
-export default function TaromboPage() {
+function TaromboPageContent() {
   const searchParams = useSearchParams();
   
   const [data,       setData]       = useState<TaromboData|null>(null);
@@ -1938,5 +1938,19 @@ export default function TaromboPage() {
         background:`repeating-linear-gradient(90deg,${C.merahTua} 0px,${C.merahTua} 20px,${C.emasT} 20px,${C.emasT} 28px,${C.hitam} 28px,${C.hitam} 36px,${C.emasT} 36px,${C.emasT} 44px,${C.merahTua} 44px,${C.merahTua} 64px)`
       }}/>
     </div>
+  );
+}
+
+
+// Wrap dengan Suspense untuk useSearchParams
+export default function TaromboPage() {
+  return (
+    <Suspense fallback={
+      <div style={{ minHeight: '100vh', background: '#0D0B08', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#C9A84C' }}>
+        <div style={{ fontFamily: "'Cinzel',serif", fontSize: '1rem' }}>Memuat...</div>
+      </div>
+    }>
+      <TaromboPageContent />
+    </Suspense>
   );
 }

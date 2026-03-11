@@ -264,8 +264,8 @@ const PersonRowMobile = ({
 const GenHeader = ({ gen, list, isMobile }: {
   gen: number; list: Person[]; isMobile: boolean;
 }) => {
-  const directCount = list.filter(p => p.isDirectDescendant).length;
-  const spouseCount = list.filter(p => !p.isDirectDescendant).length;
+  const directCount = list.filter(p => !p.isIstri).length;
+  const spouseCount = list.filter(p => p.isIstri).length;
   
   return (
     <div style={{display:"flex",alignItems:"center",gap:isMobile?10:16,margin:isMobile?"24px 0 8px":"32px 0 10px"}}>
@@ -382,7 +382,7 @@ export default function PersonListPage() {
     return map;
   },[persons]);
 
-  const directDescendants = persons.filter(p=>p.isDirectDescendant);
+  const directDescendants = persons.filter(p=>!p.isIstri);
   const totalKeturunan = directDescendants.length;
   const totalPasangan  = persons.length - totalKeturunan;
   const totalLaki      = directDescendants.filter(p=>p.jenisKelamin==="LAKI_LAKI").length;
