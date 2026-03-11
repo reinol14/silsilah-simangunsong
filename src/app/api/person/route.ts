@@ -43,8 +43,34 @@ export async function GET(request: NextRequest) {
             include: {
               marriage: {
                 include: {
-                  husband: true,
-                  wife: true,
+                  husband: {
+                    include: {
+                      children: {
+                        include: {
+                          marriage: {
+                            include: {
+                              husband: true,
+                              wife: true,
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                  wife: {
+                    include: {
+                      children: {
+                        include: {
+                          marriage: {
+                            include: {
+                              husband: true,
+                              wife: true,
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
                 },
               },
             },

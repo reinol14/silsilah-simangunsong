@@ -22,8 +22,8 @@ interface Person {
 interface Marriage {
   id: number;
   tanggalMenikah: string | null;
-  wife: SimplePerson;
-  husband: SimplePerson;
+  wife: PersonWithChildren;
+  husband: PersonWithChildren;
   children: ChildRelation[];
 }
 
@@ -32,9 +32,21 @@ interface SimplePerson {
   nama: string;
 }
 
+interface PersonWithChildren extends SimplePerson {
+  children?: {
+    marriage: {
+      husband: SimplePerson;
+      wife: SimplePerson;
+    };
+  }[];
+}
+
 interface ChildRelation {
   id: number;
-  marriage: { husband: SimplePerson; wife: SimplePerson };
+  marriage: { 
+    husband: PersonWithChildren; 
+    wife: PersonWithChildren; 
+  };
   person: SimplePerson;
 }
 
@@ -229,6 +241,18 @@ export default function ProfilPage() {
   const marriages  = person.jenisKelamin === "LAKI_LAKI" ? person.marriagesAsHusband : person.marriagesAsWife;
   const parentInfo = person.children.length > 0 ? person.children[0].marriage : null;
 
+  // Extract grandparents (opung) from father's parents
+  let grandparentInfo: { husband: SimplePerson; wife: SimplePerson } | null = null;
+  if (parentInfo?.husband?.children && parentInfo.husband.children.length > 0) {
+    const fatherParentMarriage = parentInfo.husband.children[0].marriage;
+    if (fatherParentMarriage) {
+      grandparentInfo = {
+        husband: fatherParentMarriage.husband,
+        wife: fatherParentMarriage.wife,
+      };
+    }
+  }
+
   const formatDate = (d: string) => new Date(d).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
   const isMale     = person.jenisKelamin === "LAKI_LAKI";
 
@@ -256,6 +280,7 @@ export default function ProfilPage() {
 
         .nav-a:hover   { color:${C.emas}!important; }
         .btn-back:hover { border-color:${C.emas}!important; color:${C.emas}!important; background:rgba(201,168,76,.06)!important; }
+        .btn-tarombo:hover { transform:translateY(-2px)!important; box-shadow:0 8px 32px rgba(201,168,76,.4)!important; }
         .chip-hover:hover { background:rgba(201,168,76,.12)!important; border-color:rgba(201,168,76,.5)!important; color:${C.emasM}!important; }
         .marriage-card:hover { border-color:rgba(201,168,76,.28)!important; transform:translateY(-2px); }
         .child-item:hover { color:${C.emas}!important; }
@@ -406,6 +431,20 @@ export default function ProfilPage() {
               </span>
             )}
           </div>
+
+          {/* Lihat di Pohon Silsilah button */}
+          <div className="fu d10" style={{ marginTop: 36 }}>
+            <Link href={`/tarombo?focus=${person.id}`} className="btn-tarombo" style={{
+              fontFamily: "'Cinzel',serif", fontSize: "0.68rem", letterSpacing: "0.18em", textTransform: "uppercase",
+              color: C.hitam, background: `linear-gradient(135deg,${C.emas},${C.emasM})`,
+              padding: "11px 28px", textDecoration: "none", display: "inline-block",
+              clipPath: "polygon(10px 0%,100% 0%,calc(100% - 10px) 100%,0% 100%)",
+              transition: "all .3s",
+              boxShadow: `0 4px 20px rgba(201,168,76,.2)`,
+            }}>
+              🌳 Lihat di Pohon Silsilah
+            </Link>
+          </div>
         </div>
       </section>
 
@@ -464,6 +503,18 @@ export default function ProfilPage() {
                     <PersonChip id={parentInfo.husband.id} nama={parentInfo.husband.nama} />
                     <span style={{ color: C.emasT, fontSize: "0.8rem" }}>×</span>
                     <PersonChip id={parentInfo.wife.id}    nama={parentInfo.wife.nama} />
+                  </div>
+                </div>
+              )}
+
+              {/* Opung (Kakek & Nenek) */}
+              {grandparentInfo && (
+                <div style={{ marginBottom: 20, paddingBottom: 20, borderBottom: `1px solid rgba(201,168,76,.08)` }}>
+                  <span style={{ fontFamily: "'Cinzel',serif", fontSize: "0.54rem", letterSpacing: "0.28em", textTransform: "uppercase", color: C.emasT, display: "block", marginBottom: 10 }}>Opung (Kakek & Nenek)</span>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                    <PersonChip id={grandparentInfo.husband.id} nama={grandparentInfo.husband.nama} />
+                    <span style={{ color: C.emasT, fontSize: "0.8rem" }}>×</span>
+                    <PersonChip id={grandparentInfo.wife.id}    nama={grandparentInfo.wife.nama} />
                   </div>
                 </div>
               )}

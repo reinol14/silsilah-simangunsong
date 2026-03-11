@@ -261,23 +261,28 @@ const PersonRowMobile = ({
 };
 
 // ─── Generation Section Header ────────────────────────────────────────────────
-const GenHeader = ({ gen, directCount, spouseCount, isMobile }: {
-  gen: number; directCount: number; spouseCount: number; isMobile: boolean;
-}) => (
-  <div style={{display:"flex",alignItems:"center",gap:isMobile?10:16,margin:isMobile?"24px 0 8px":"32px 0 10px"}}>
-    <div style={{fontFamily:"'Cinzel Decorative',cursive",fontSize:isMobile?"1.1rem":"1.4rem",fontWeight:700,color:C.emas,minWidth:isMobile?38:52,textAlign:"center",textShadow:`0 0 20px rgba(201,168,76,.3)`}}>
-      {toRoman(gen+1)}
+const GenHeader = ({ gen, list, isMobile }: {
+  gen: number; list: Person[]; isMobile: boolean;
+}) => {
+  const directCount = list.filter(p => p.isDirectDescendant).length;
+  const spouseCount = list.filter(p => !p.isDirectDescendant).length;
+  
+  return (
+    <div style={{display:"flex",alignItems:"center",gap:isMobile?10:16,margin:isMobile?"24px 0 8px":"32px 0 10px"}}>
+      <div style={{fontFamily:"'Cinzel Decorative',cursive",fontSize:isMobile?"1.1rem":"1.4rem",fontWeight:700,color:C.emas,minWidth:isMobile?38:52,textAlign:"center",textShadow:`0 0 20px rgba(201,168,76,.3)`}}>
+        {toRoman(gen+1)}
+      </div>
+      <div style={{flex:1,height:1,background:`linear-gradient(90deg,rgba(201,168,76,.3),transparent)`}}/>
+      <span style={{fontFamily:"'Cinzel',serif",fontSize:isMobile?"0.48rem":"0.58rem",letterSpacing:"0.16em",textTransform:"uppercase",color:C.emasT,opacity:.7,whiteSpace:isMobile?"nowrap":"normal"}}>
+        {isMobile
+          ? `Gen ${gen+1} · ${directCount}${spouseCount>0?` +${spouseCount}`:""}`
+          : `Generasi ke-${gen+1} · ${directCount} keturunan${spouseCount>0?` · ${spouseCount} pasangan`:""}`
+        }
+      </span>
+      <div style={{width:6,height:6,background:C.merah,transform:"rotate(45deg)",opacity:.6,flexShrink:0}}/>
     </div>
-    <div style={{flex:1,height:1,background:`linear-gradient(90deg,rgba(201,168,76,.3),transparent)`}}/>
-    <span style={{fontFamily:"'Cinzel',serif",fontSize:isMobile?"0.48rem":"0.58rem",letterSpacing:"0.16em",textTransform:"uppercase",color:C.emasT,opacity:.7,whiteSpace:isMobile?"nowrap":"normal"}}>
-      {isMobile
-        ? `Gen ${gen+1} · ${directCount+spouseCount}×`
-        : `Generasi ke-${gen+1} · ${directCount} keturunan${spouseCount>0?` · ${spouseCount} pasangan`:""}`
-      }
-    </span>
-    <div style={{width:6,height:6,background:C.merah,transform:"rotate(45deg)",opacity:.6,flexShrink:0}}/>
-  </div>
-);
+  );
+};
 
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
 const Skeleton = ({isMobile}:{isMobile:boolean}) => (
@@ -377,8 +382,11 @@ export default function PersonListPage() {
     return map;
   },[persons]);
 
-  const totalLaki      = persons.filter(p=>p.jenisKelamin==="LAKI_LAKI").length;
-  const totalPerempuan = persons.filter(p=>p.jenisKelamin==="PEREMPUAN").length;
+  const directDescendants = persons.filter(p=>p.isDirectDescendant);
+  const totalKeturunan = directDescendants.length;
+  const totalPasangan  = persons.length - totalKeturunan;
+  const totalLaki      = directDescendants.filter(p=>p.jenisKelamin==="LAKI_LAKI").length;
+  const totalPerempuan = directDescendants.filter(p=>p.jenisKelamin==="PEREMPUAN").length;
 
   return (
     <div style={{minHeight:"100vh",backgroundColor:C.hitam,color:C.krem,fontFamily:"'Cormorant Garamond',serif",overflowX:"hidden",position:"relative"}}>
@@ -490,15 +498,16 @@ export default function PersonListPage() {
 
         {/* ══ STATS ══ */}
         {!loading && persons.length>0 && (
-          <div className="fu d2" style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:2,marginBottom:isMobile?20:36}}>
+          <div className="fu d2" style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(4,1fr)",gap:2,marginBottom:isMobile?20:36}}>
             {[
-              {v:persons.length,  l:isMobile?"Total":"Total Anggota",  c:C.emas},
-              {v:totalLaki,       l:isMobile?"Laki":"Laki-laki",       c:C.biru},
-              {v:totalPerempuan,  l:isMobile?"Perempuan":"Perempuan",   c:C.pink},
+              {v:totalKeturunan,  l:isMobile?"Keturunan":"Keturunan Langsung",  c:C.emas},
+              {v:totalLaki,       l:isMobile?"Laki":"Laki-laki",                c:C.biru},
+              {v:totalPerempuan,  l:isMobile?"Perempuan":"Perempuan",            c:C.pink},
+              {v:totalPasangan,   l:isMobile?"Pasangan":"Pasangan/Menantu",     c:C.kremT},
             ].map((s,i)=>(
               <div key={i} style={{background:"rgba(26,22,18,0.7)",border:`1px solid rgba(201,168,76,.1)`,padding:isMobile?"12px 8px":"16px",textAlign:"center"}}>
                 <div style={{fontFamily:"'Cinzel Decorative',cursive",fontSize:isMobile?"1.4rem":"1.8rem",color:s.c,lineHeight:1,marginBottom:3}}>{s.v}</div>
-                <div style={{fontFamily:"'Cinzel',serif",fontSize:isMobile?"0.44rem":"0.56rem",letterSpacing:"0.18em",textTransform:"uppercase",color:C.emasT,opacity:.75}}>{s.l}</div>
+                <div style={{fontFamily:"'Cinzel',serif",fontSize:isMobile?"0.44rem":"0.52rem",letterSpacing:"0.18em",textTransform:"uppercase",color:C.emasT,opacity:.75}}>{s.l}</div>
               </div>
             ))}
           </div>
@@ -587,8 +596,7 @@ export default function PersonListPage() {
               <div key={gen}>
                 <GenHeader
                   gen={gen}
-                  directCount={list.filter(p=>!p.isIstri).length}
-                  spouseCount={list.filter(p=>p.isIstri).length}
+                  list={list}
                   isMobile={isMobile}
                 />
                 {list.map((p)=>(
@@ -625,7 +633,7 @@ export default function PersonListPage() {
                 {grouped.length} Generasi Tercatat
               </p>
               <p style={{fontFamily:"'IM Fell English',serif",fontStyle:"italic",fontSize:isMobile?"0.78rem":"0.85rem",color:C.emasT,opacity:.7}}>
-                {persons.length} anggota keluarga Simangunsong dalam database
+                {totalKeturunan} keturunan langsung{totalPasangan>0?` · ${totalPasangan} pasangan`:""} · {persons.length} total
               </p>
               <p style={{fontFamily:"'Cinzel',serif",fontSize:"0.56rem",letterSpacing:"0.25em",color:C.emasT,opacity:.5,marginTop:8,textTransform:"uppercase"}}>
                 Horas · Horas · Horas
