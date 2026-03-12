@@ -10,15 +10,10 @@ export async function GET(request: NextRequest) {
     const cari   = searchParams.get("cari")   || "";
     const gender = searchParams.get("gender") || "";
 
-    // Ambil semua data sekaligus
+    // PERBAIKAN: Ambil SEMUA person untuk perhitungan generasi yang benar
+    // Filter akan diterapkan di akhir untuk hasil
     const [allPersons, allChildren, allMarriages] = await Promise.all([
       prisma.person.findMany({
-        where: {
-          AND: [
-            cari   ? { nama: { contains: cari } } : {},
-            gender ? { jenisKelamin: gender as any } : {},
-          ],
-        },
         include: {
           marriagesAsHusband: {
             include: {
@@ -79,25 +74,49 @@ export async function GET(request: NextRequest) {
       visited.add(personId);
 
       const child = childOfMap.get(personId);
-      if (child === undefined) return 0; // root / tidak punya ayah di DB
+      if (child === undefined) return 0; // root / tidak punya parent di DB
 
       const fatherId = marriageToHusband.get(child.marriageId);
-      if (fatherId === undefined) return 0;
-
-      return 1 + getDepth(fatherId, visited);
+      const motherId = marriageToWife.get(child.marriageId);
+      
+      // Cek apakah ayah adalah keturunan Simangunsong (ada di childOfMap)
+      const fatherIsDescendant = fatherId !== undefined && childOfMap.has(fatherId);
+      
+      // Cek apakah ibu adalah keturunan Simangunsong (ada di childOfMap)
+      const motherIsDescendant = motherId !== undefined && childOfMap.has(motherId);
+      
+      // PRIORITAS: Gunakan jalur yang valid (keturunan Simangunsong)
+      
+      // Kasus 1: Ayah adalah keturunan Simangunsong
+      if (fatherIsDescendant) {
+        return 1 + getDepth(fatherId, visited);
+      }
+      
+      // Kasus 2: Ayah bukan keturunan, tapi ibu adalah keturunan Simangunsong
+      // (Ayah adalah external husband, anak mengikuti garis ibu)
+      if (motherIsDescendant) {
+        return 1 + getDepth(motherId, visited);
+      }
+      
+      // Kasus 3: Tidak ada ayah/ibu yang keturunan
+      // Ini adalah anak dari founding couple (ayah & ibu keduanya root/generasi 0)
+      if (fatherId !== undefined) {
+        return 1 + getDepth(fatherId, visited);
+      }
+      
+      // Fallback: tidak ada jalur valid
+      return 0;
     }
 
     // ── Assign generasi ke semua person ───────────────────────────────────
     // Loop beberapa kali untuk handle dependencies antara child calculation dan spouse inheritance
     for (let iteration = 0; iteration < 5; iteration++) {
-      // Pass A: Hitung generasi untuk anak-anak berdasarkan ancestry (yang belum punya generasi)
+      // Pass A: Hitung generasi untuk semua person dengan childOfMap (adalah anak dari seseorang)
       for (const p of allPersons) {
         if (childOfMap.has(p.id) && !depthMap.has(p.id)) {
           const depth = getDepth(p.id, new Set());
-          // Hanya set jika depth > 0 ATAU ini iterasi terakhir (untuk handle root children)
-          if (depth > 0 || iteration === 4) {
-            depthMap.set(p.id, depth);
-          }
+          // Set generasi untuk semua anak, termasuk yang depth === 0 (anak dari root)
+          depthMap.set(p.id, depth);
         }
       }
 
@@ -275,13 +294,26 @@ export async function GET(request: NextRequest) {
     const sorted = sortedIds.map(id => personById.get(id)!).filter(Boolean);
 
     // ── Build result ───────────────────────────────────────────────────────
-    const result = sorted.map(p => ({
+    let result = sorted.map(p => ({
       ...p,
       generasi:   depthMap.get(p.id) ?? 0,
       isIstri:    wifeIds.has(p.id),
-      pasangan:   p.marriagesAsHusband[0]?.wife || p.marriagesAsWife[0]?.husband || null,
+      // PERBAIKAN POLIGAMI: Return array semua pasangan (bisa lebih dari 1)
+      pasangan:   p.marriagesAsHusband.length > 0 
+                    ? p.marriagesAsHusband.map(m => m.wife)
+                    : (p.marriagesAsWife[0]?.husband ? [p.marriagesAsWife[0].husband] : []),
       jumlahAnak: p.marriagesAsHusband.reduce((s, m) => s + m.children.length, 0),
     }));
+
+    // ── Apply search filters AFTER generasi calculation ───────────────────
+    // Ini memastikan generasi tetap konsisten meski ada filter
+    if (cari || gender) {
+      result = result.filter(p => {
+        const matchName = !cari || p.nama.toLowerCase().includes(cari.toLowerCase());
+        const matchGender = !gender || p.jenisKelamin === gender;
+        return matchName && matchGender;
+      });
+    }
 
     return NextResponse.json({ success: true, data: result });
   } catch (error) {

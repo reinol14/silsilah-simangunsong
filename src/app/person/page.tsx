@@ -16,7 +16,7 @@ interface Person {
   generasi:     number;
   jumlahAnak:   number;
   isIstri:      boolean;
-  pasangan:     { id: number; nama: string } | null;
+  pasangan:     { id: number; nama: string }[]; // Array untuk support poligami
 }
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
@@ -117,7 +117,11 @@ const PersonRowDesktop = ({
             <div style={{display:"flex",gap:16,marginTop:4,flexWrap:"wrap"}}>
               {person.tempatLahir && <span style={{fontFamily:"'IM Fell English',serif",fontStyle:"italic",fontSize:"0.76rem",color:C.emasT}}>📍 {person.tempatLahir}</span>}
               {(person.tanggalLahir||person.tanggalWafat) && <span style={{fontFamily:"'Cormorant Garamond',serif",fontSize:"0.78rem",color:C.kremT,opacity:.55}}>{formatTahun(person.tanggalLahir)}{person.tanggalWafat?` – ${formatTahun(person.tanggalWafat)}`:""}</span>}
-              {person.pasangan && <span style={{fontFamily:"'IM Fell English',serif",fontStyle:"italic",fontSize:"0.76rem",color:person.isIstri?C.biru:C.pink,opacity:.65}}>✦ {person.pasangan.nama}</span>}
+              {person.pasangan && person.pasangan.length > 0 && (
+                <span style={{fontFamily:"'IM Fell English',serif",fontStyle:"italic",fontSize:"0.76rem",color:person.isIstri?C.biru:C.pink,opacity:.65}}>
+                  ✦ {person.pasangan.map(p => p.nama).join(" & ")}
+                </span>
+              )}
             </div>
           </div>
           {/* Gen badge */}
@@ -220,9 +224,9 @@ const PersonRowMobile = ({
                   {formatTahun(person.tanggalLahir)}{person.tanggalWafat?` – ${formatTahun(person.tanggalWafat)}` : ""}
                 </span>
               )}
-              {person.pasangan && !person.isIstri && (
+              {person.pasangan && person.pasangan.length > 0 && !person.isIstri && (
                 <span style={{fontFamily:"'IM Fell English',serif",fontStyle:"italic",fontSize:"0.68rem",color:C.pink,opacity:.65,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:110}}>
-                  ✦ {person.pasangan.nama}
+                  ✦ {person.pasangan.map(p => p.nama).join(" & ")}
                 </span>
               )}
               {person.jumlahAnak > 0 && (
@@ -361,16 +365,31 @@ export default function PersonListPage() {
       map.get(p.generasi)!.push(p);
     }
     return [...map.entries()].sort((a,b)=>a[0]-b[0]).map(([gen,list])=>{
-      const spouseByPartnerId = new Map<number,Person>();
-      for (const p of list) if (p.isIstri&&p.pasangan) spouseByPartnerId.set(p.pasangan.id,p);
+      const spouseByPartnerId = new Map<number,Person[]>();
+      for (const p of list) {
+        if (p.isIstri && p.pasangan && p.pasangan.length > 0) {
+          for (const partner of p.pasangan) {
+            if (!spouseByPartnerId.has(partner.id)) spouseByPartnerId.set(partner.id, []);
+            spouseByPartnerId.get(partner.id)!.push(p);
+          }
+        }
+      }
       const added = new Set<number>();
       const ordered: Person[] = [];
+      
+      // Urutkan: Direct descendants dulu (bukan istri), lalu sisipkan istri-istrinya
       for (const p of list) {
         if (p.isIstri) continue;
         ordered.push(p); added.add(p.id);
-        const spouse = spouseByPartnerId.get(p.id);
-        if (spouse) { ordered.push(spouse); added.add(spouse.id); }
+        const spouses = spouseByPartnerId.get(p.id) ?? [];
+        for (const spouse of spouses) {
+          if (!added.has(spouse.id)) {
+            ordered.push(spouse); 
+            added.add(spouse.id);
+          }
+        }
       }
+      // Tambahkan sisa yang belum masuk (seharusnya tidak ada)
       for (const p of list) if (!added.has(p.id)) ordered.push(p);
       return [gen, ordered] as [number, Person[]];
     });
