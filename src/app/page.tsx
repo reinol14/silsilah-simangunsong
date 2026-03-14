@@ -12,14 +12,6 @@ interface Stats {
   perempuan:     number;
 }
 
-interface Person {
-  id:           number;
-  nama:         string;
-  jenisKelamin: "LAKI_LAKI" | "PEREMPUAN";
-  foto:         string | null;
-  tempatLahir:  string | null;
-}
-
 interface Donatur {
   id:       number;
   nama:     string;
@@ -44,10 +36,10 @@ const C = {
 };
 
 // ─── Nav links & footer ───────────────────────────────────────────────────────
-const navLinks  = [["#tarombo","Tarombo"],["#fitur","Fitur"],["#anggota","Anggota"],["/cari","Cari"],["#donasi","Donasi"]];
+const navLinks  = [["/tarombo","Tarombo"],["#fitur","Fitur"],["#tentang","Tentang"],["#faq","FAQ"],["/cari","Cari"],["#donasi","Donasi"]];
 const footerCols = [
-  { title:"Navigasi", links:[["/tarombo","Pohon Silsilah"],["/person","Daftar Anggota"],["/cari","Pencarian"]] },
-  { title:"Lainnya",  links:[["/tentang","Tentang Kami"],["/kontak","Kontak"],["/login","Masuk Admin"]] },
+  { title:"Navigasi", links:[["/tarombo","Pohon Silsilah"],["/person","Daftar Anggota"],["/cari","Pencarian"],["/tambah","Tambah Anggota"]] },
+  { title:"Akses",    links:[["/login","Masuk Admin"],["/admin","Dashboard Admin"]] },
 ];
 
 // ─── SVG Icons ────────────────────────────────────────────────────────────────
@@ -79,9 +71,78 @@ const SearchSVG = () => (
 );
 
 const features = [
-  { number:"01", title:"Visualisasi Pohon",  icon:<TreeIcon/>,   desc:"Lihat hubungan kekerabatan dalam pohon silsilah interaktif yang menampilkan seluruh garis keturunan Simangunsong secara visual." },
-  { number:"02", title:"Kelola Data",        icon:<PersonIcon/>, desc:"Administrator dapat mengelola data anggota keluarga lengkap dengan foto, tanggal lahir, dan riwayat hidup untuk memperkaya arsip silsilah." },
-  { number:"03", title:"Pencarian Cerdas",   icon:<SearchSVG/>,  desc:"Temukan saudara marga dengan cepat melalui fitur pencarian berdasarkan nama, generasi, daerah asal, maupun garis keturunan." },
+  {
+    number:"01",
+    title:"Pohon Silsilah Interaktif",
+    icon:<TreeIcon/>,
+    desc:"Telusuri hubungan orang tua, pasangan, dan anak dalam struktur tarombo marga Simangunsong secara visual per generasi.",
+    points:["Filter 3-10 generasi atau tampilkan semua","Mode fokus untuk menelusuri satu garis keluarga","Panel detail dengan relasi inti dan anak-anak"],
+    href:"/tarombo",
+    cta:"Buka Tarombo",
+  },
+  {
+    number:"02",
+    title:"Profil Anggota Keluarga",
+    icon:<PersonIcon/>,
+    desc:"Setiap anggota memiliki profil yang terhubung dengan data kelahiran, pasangan, keturunan, dan keterkaitan antar cabang keluarga.",
+    points:["Akses daftar anggota terstruktur","Lihat relasi keluarga langsung dari profil","Cocok untuk dokumentasi keluarga besar"],
+    href:"/person",
+    cta:"Lihat Anggota",
+  },
+  {
+    number:"03",
+    title:"Pencarian Nama Simangunsong",
+    icon:<SearchSVG/>,
+    desc:"Cari anggota berdasarkan nama untuk menemukan profil dan posisi dalam silsilah lebih cepat tanpa menelusuri pohon secara manual.",
+    points:["Pencarian cepat berdasarkan nama","Arahkan langsung ke profil anggota","Memudahkan verifikasi data keluarga"],
+    href:"/cari",
+    cta:"Cari Anggota",
+  },
+];
+
+const siteInfoPoints = [
+  {
+    title: "Apa itu Silsilah Simangunsong?",
+    text: "Website ini adalah arsip digital marga Simangunsong untuk mendokumentasikan keturunan, hubungan keluarga, dan riwayat generasi secara terstruktur dalam format tarombo Batak Toba.",
+  },
+  {
+    title: "Siapa yang bisa mengakses?",
+    text: "Semua orang dapat melihat data pohon silsilah dan profil anggota secara publik. Perubahan data dilakukan oleh admin agar kualitas data keluarga tetap konsisten.",
+  },
+  {
+    title: "Data apa saja yang tersedia?",
+    text: "Setiap profil dapat memuat nama, jenis kelamin, tempat lahir, orang tua, pasangan, anak, hingga keterkaitan antar generasi pada pohon silsilah interaktif.",
+  },
+];
+
+const usageSteps = [
+  "Mulai dari halaman Pohon Silsilah untuk melihat posisi keluarga dalam struktur generasi.",
+  "Gunakan menu Cari Anggota saat Anda sudah mengetahui nama yang ingin ditelusuri.",
+  "Buka halaman Profil untuk melihat relasi orang tua, pasangan, anak, dan koneksi keturunan.",
+  "Jika ada data yang perlu diperbarui, hubungi pengelola agar diverifikasi sebelum dipublikasikan.",
+];
+
+const faqItems = [
+  {
+    q: "Apa itu Marga Simangunsong?",
+    a: "Simangunsong adalah salah satu marga dalam masyarakat Batak Toba. Marga diwariskan secara patrilineal dari ayah kepada anak-anak dan menjadi identitas penting dalam partuturan dan adat.",
+  },
+  {
+    q: "Apa itu tarombo Batak Toba?",
+    a: "Tarombo adalah catatan silsilah yang menampilkan hubungan antar generasi dalam marga. Tarombo membantu memahami kedudukan kekerabatan dan hubungan adat di tengah keluarga besar.",
+  },
+  {
+    q: "Bagaimana cara mencari anggota Simangunsong di website ini?",
+    a: "Anda bisa memakai fitur pencarian nama, lalu membuka profil anggota. Dari profil, Anda dapat melanjutkan penelusuran ke orang tua, pasangan, maupun anak-anaknya.",
+  },
+  {
+    q: "Apakah data silsilah ini publik?",
+    a: "Ya. Informasi pohon silsilah dan profil anggota dapat dilihat publik. Namun penambahan atau pengubahan data dilakukan melalui akses admin agar informasi lebih akurat.",
+  },
+  {
+    q: "Bagaimana cara mengusulkan perbaikan data?",
+    a: "Silakan hubungi pengelola melalui WhatsApp pada bagian donasi/konfirmasi. Sertakan detail nama, hubungan keluarga, dan koreksi data agar proses validasi lebih cepat.",
+  },
 ];
 
 
@@ -212,52 +273,12 @@ const StatCard = ({value,label,desc,index,active}:{value:number;label:string;des
   );
 };
 
-// ─── Person Card ──────────────────────────────────────────────────────────────
-const PersonCard = ({person}:{person:Person}) => (
-  <Link href={`/profil/${person.id}`} style={{textDecoration:"none"}} className="person-card">
-    <div style={{
-      background:C.hitamL,border:`1px solid rgba(201,168,76,.12)`,
-      padding:"20px",textAlign:"center",transition:"all .3s",cursor:"pointer",
-    }}>
-      {/* Avatar */}
-      <div style={{
-        width:64,height:64,borderRadius:"50%",margin:"0 auto 12px",
-        background:`linear-gradient(135deg,${C.merahTua},${C.hitam})`,
-        border:`2px solid rgba(201,168,76,.3)`,display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",
-      }}>
-        {person.foto
-          ? <img src={person.foto} alt={person.nama} style={{width:"100%",height:"100%",objectFit:"cover"}}/>
-          : <span style={{fontFamily:"'Cinzel Decorative',cursive",fontSize:"1.4rem",color:C.emas}}>
-              {person.nama.charAt(0)}
-            </span>
-        }
-      </div>
-      <p style={{fontFamily:"'Cinzel',serif",fontSize:"0.75rem",color:C.kremT,lineHeight:1.4,letterSpacing:"0.03em",marginBottom:6}}>{person.nama}</p>
-      <span style={{
-        fontFamily:"'Cinzel',serif",fontSize:"0.55rem",letterSpacing:"0.15em",textTransform:"uppercase",
-        color: person.jenisKelamin === "LAKI_LAKI" ? "#7EB8D4" : "#D4A0B5",
-        border:`1px solid ${person.jenisKelamin === "LAKI_LAKI" ? "rgba(126,184,212,.3)" : "rgba(212,160,181,.3)"}`,
-        padding:"2px 8px",
-      }}>
-        {person.jenisKelamin === "LAKI_LAKI" ? "Laki-laki" : "Perempuan"}
-      </span>
-      {person.tempatLahir && (
-        <p style={{fontFamily:"'IM Fell English',serif",fontStyle:"italic",fontSize:"0.75rem",color:C.emasT,marginTop:6}}>
-          {person.tempatLahir}
-        </p>
-      )}
-    </div>
-  </Link>
-);
-
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function HomePage() {
   const [scrolled,   setScrolled]   = useState(false);
   const [stats,      setStats]      = useState<Stats | null>(null);
-  const [persons,    setPersons]    = useState<Person[]>([]);
   const [donaturs,   setDonaturs]   = useState<Donatur[]>([]);
   const [loadingStats, setLoadingStats] = useState(true);
-  const [loadingPersons, setLoadingPersons] = useState(true);
   const [statsActive, setStatsActive] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const statsRef = useRef<HTMLDivElement>(null);
@@ -292,15 +313,6 @@ export default function HomePage() {
       .then(res => { if (res.success) setStats(res.data); })
       .catch(console.error)
       .finally(() => setLoadingStats(false));
-  }, []);
-
-  // Fetch recent persons dari API
-  useEffect(() => {
-    fetch("/api/person?limit=4&sort=recent")
-      .then(r => r.json())
-      .then(res => { if (res.success) setPersons(res.data); })
-      .catch(console.error)
-      .finally(() => setLoadingPersons(false));
   }, []);
 
   // Fetch donatur dari API
@@ -559,80 +571,81 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* ── Tentang Website ── */}
+      <section id="tentang" style={{position:"relative",zIndex:10,padding:"100px 56px",background:C.hitamL,borderTop:`1px solid rgba(201,168,76,.1)`}}>
+        <RevealDiv>
+          <SectionHeader
+            tag="Informasi Utama"
+            title="Panduan"
+            gold="Silsilah Simangunsong"
+            sub="Ringkasan informasi penting agar pengunjung memahami fungsi website dalam satu halaman"
+          />
+
+          <div style={{maxWidth:1100,margin:"0 auto",display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12}} className="feat-grid">
+            {siteInfoPoints.map((item) => (
+              <article key={item.title} style={{background:"rgba(13,11,8,.6)",border:`1px solid rgba(201,168,76,.14)`,padding:"26px 24px"}}>
+                <h3 style={{fontFamily:"'Cinzel',serif",fontSize:"0.92rem",letterSpacing:"0.08em",color:C.emas,marginBottom:10}}>{item.title}</h3>
+                <p style={{fontFamily:"'Cormorant Garamond',serif",fontSize:"1rem",lineHeight:1.75,color:C.kremT,opacity:.9}}>{item.text}</p>
+              </article>
+            ))}
+          </div>
+
+          <div style={{maxWidth:920,margin:"36px auto 0",border:`1px solid rgba(201,168,76,.14)`,background:"rgba(13,11,8,.55)",padding:"26px 24px"}}>
+            <h3 style={{fontFamily:"'Cinzel',serif",fontSize:"0.75rem",letterSpacing:"0.22em",textTransform:"uppercase",color:C.emasM,marginBottom:14}}>
+              Cara Menggunakan Website Ini
+            </h3>
+            <ol style={{paddingLeft:20,color:C.kremT,display:"grid",gap:10}}>
+              {usageSteps.map((step) => (
+                <li key={step} style={{fontFamily:"'Cormorant Garamond',serif",fontSize:"1rem",lineHeight:1.7}}>{step}</li>
+              ))}
+            </ol>
+            <div style={{display:"flex",gap:12,flexWrap:"wrap",marginTop:20}}>
+              <Link href="/tarombo" className="btn-p" style={btnPrimary}>Buka Tarombo</Link>
+              <Link href="/person" className="btn-s" style={btnSecondary}>Lihat Daftar Anggota</Link>
+              <Link href="/cari" className="btn-s" style={btnSecondary}>Cari Nama Anggota</Link>
+            </div>
+          </div>
+        </RevealDiv>
+      </section>
+
       {/* ── Features ── */}
       <section id="fitur" style={{position:"relative",zIndex:10,padding:"100px 56px",background:C.hitam}}>
         <RevealDiv>
-          <SectionHeader tag="Fitur Utama" title="Temukan" gold="Silsilah Anda" sub="Alat lengkap untuk menjelajahi dan melestarikan silsilah keluarga"/>
-          <div className="feat-grid" style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:2,maxWidth:1050,margin:"0 auto"}}>
+          <SectionHeader tag="Fitur Utama" title="Semua yang Dibutuhkan" gold="Dalam Satu Laman" sub="Setiap fitur dirancang untuk menelusuri marga Simangunsong dengan cepat, jelas, dan terhubung"/>
+          <div className="feat-grid" style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,maxWidth:1100,margin:"0 auto"}}>
             {features.map((f,i) => (
-              <div key={i} className="feat-card" style={{position:"relative",background:C.hitamL,padding:"44px 32px",border:`1px solid rgba(201,168,76,.08)`,transition:"all .35s",overflow:"hidden"}}>
+              <article key={i} className="feat-card" style={{position:"relative",background:C.hitamL,padding:"32px 26px",border:`1px solid rgba(201,168,76,.14)`,transition:"all .35s",overflow:"hidden"}}>
                 <div className="feat-line" style={{position:"absolute",top:0,left:0,right:0,height:3,background:`linear-gradient(90deg,${C.merahTua},${C.emas},${C.merahTua})`,opacity:0,transition:"opacity .35s"}}/>
-                <div style={{width:52,height:52,marginBottom:24,position:"relative",zIndex:1}}>{f.icon}</div>
-                <h3 style={{fontFamily:"'Cinzel',serif",fontSize:"1rem",fontWeight:700,color:C.putih,letterSpacing:"0.05em",marginBottom:12,position:"relative",zIndex:1}}>{f.title}</h3>
-                <p style={{fontSize:"0.97rem",lineHeight:1.78,color:C.kremT,opacity:.75,position:"relative",zIndex:1}}>{f.desc}</p>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+                  <div style={{width:46,height:46,position:"relative",zIndex:1}}>{f.icon}</div>
+                  <span style={{fontFamily:"'Cinzel',serif",fontSize:"0.58rem",letterSpacing:"0.2em",textTransform:"uppercase",color:C.emasT,opacity:.9}}>{f.number}</span>
+                </div>
+                <h3 style={{fontFamily:"'Cinzel',serif",fontSize:"0.95rem",fontWeight:700,color:C.putih,letterSpacing:"0.05em",marginBottom:10,position:"relative",zIndex:1,lineHeight:1.4}}>{f.title}</h3>
+                <p style={{fontSize:"0.95rem",lineHeight:1.75,color:C.kremT,opacity:.8,position:"relative",zIndex:1,marginBottom:14}}>{f.desc}</p>
+                <ul style={{listStyle:"none",display:"grid",gap:7,marginBottom:16}}>
+                  {f.points.map((point) => (
+                    <li key={point} style={{display:"flex",alignItems:"flex-start",gap:8,color:C.kremT,opacity:.9,fontSize:"0.86rem",lineHeight:1.55}}>
+                      <span style={{color:C.emas,marginTop:1}}>•</span>
+                      <span>{point}</span>
+                    </li>
+                  ))}
+                </ul>
+                <Link href={f.href} className="btn-s" style={{...btnSecondary,padding:"10px 16px",fontSize:"0.58rem",letterSpacing:"0.15em"}}>
+                  {f.cta}
+                </Link>
                 <div style={{position:"absolute",bottom:16,right:20,fontFamily:"'Cinzel Decorative',cursive",fontSize:"4rem",color:"rgba(201,168,76,.055)",fontWeight:900,lineHeight:1,pointerEvents:"none"}}>{f.number}</div>
-              </div>
+              </article>
             ))}
           </div>
-        </RevealDiv>
-      </section>
 
-      {/* ── Anggota — data real dari DB ── */}
-      <section id="anggota" style={{position:"relative",zIndex:10,padding:"100px 56px",background:C.hitamL,borderTop:`1px solid rgba(201,168,76,.1)`}}>
-        <RevealDiv>
-          <SectionHeader tag="Anggota Terdaftar" title="Keluarga" gold="Simangunsong" sub="Data langsung dari database silsilah"/>
-
-          {loadingPersons ? (
-            <div style={{display:"flex",justifyContent:"center",alignItems:"center",padding:"48px",gap:12}}>
-              <div style={{width:24,height:12,border:`2px solid rgba(201,168,76,.2)`,borderTopColor:C.emas,borderRadius:"50%",animation:"spin .8s linear infinite"}}/>
-              <span style={{fontFamily:"'Cinzel',serif",fontSize:"0.7rem",color:C.emasT,letterSpacing:"0.2em"}}>Memuat data...</span>
-            </div>
-          ) : persons.length === 0 ? (
-            <p style={{textAlign:"center",fontFamily:"'IM Fell English',serif",fontStyle:"italic",color:C.emasT,fontSize:"1.05rem"}}>
-              Belum ada data anggota. <Link href="/tambah" style={{color:C.emas}}>Tambahkan sekarang →</Link>
+          <div style={{maxWidth:1100,margin:"24px auto 0",padding:"20px 22px",border:`1px solid rgba(201,168,76,.16)`,background:"rgba(92,14,14,.28)"}}>
+            <p style={{fontFamily:"'IM Fell English',serif",fontStyle:"italic",fontSize:"1rem",lineHeight:1.72,color:C.kremT,opacity:.92}}>
+              Website ini memuat informasi inti tentang <span style={{color:C.emas}}>tarombo Simangunsong</span>,
+              <span style={{color:C.emas}}> pohon silsilah Batak Toba</span>, dan <span style={{color:C.emas}}>profil anggota keluarga</span>.
+              Pengunjung dapat langsung melanjutkan penelusuran melalui halaman <Link href="/tarombo" style={{color:C.emas,textDecoration:"none"}}>Tarombo</Link>,
+              <Link href="/person" style={{color:C.emas,textDecoration:"none",marginLeft:4}}>Daftar Anggota</Link>,
+              dan <Link href="/cari" style={{color:C.emas,textDecoration:"none"}}>Pencarian</Link> tanpa melewati section yang tidak relevan.
             </p>
-          ) : (
-            <div className="persons-grid" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,maxWidth:1050,margin:"0 auto 40px"}}>
-              {persons.map(p => <PersonCard key={p.id} person={p}/>)}
-            </div>
-          )}
-
-          <div style={{textAlign:"center",marginTop:8}}>
-            <Link href="/person" className="btn-s" style={btnSecondary}>
-              Lihat Semua Anggota
-            </Link>
-          </div>
-        </RevealDiv>
-      </section>
-
-      {/* ── Tarombo info ── */}
-      <section id="tarombo" style={{position:"relative",zIndex:10,padding:"100px 56px",background:`linear-gradient(135deg,#5C0E0E 0%,#3D0A0A 50%,#5C0E0E 100%)`,overflow:"hidden"}}>
-        <div style={{position:"absolute",inset:0,pointerEvents:"none",backgroundImage:"repeating-linear-gradient(0deg,rgba(201,168,76,.05) 0,rgba(201,168,76,.05) 1px,transparent 1px,transparent 40px),repeating-linear-gradient(90deg,rgba(201,168,76,.05) 0,rgba(201,168,76,.05) 1px,transparent 1px,transparent 40px)"}}/>
-        <RevealDiv>
-          <div style={{maxWidth:700,margin:"0 auto",textAlign:"center"}}>
-            <span style={{fontFamily:"'Cinzel',serif",fontSize:"0.63rem",letterSpacing:"0.4em",textTransform:"uppercase",color:C.emasM,display:"block",marginBottom:14}}>Tarombo Batak</span>
-            <h2 style={{fontFamily:"'Cinzel Decorative',cursive",fontSize:"clamp(1.8rem,3.5vw,3rem)",fontWeight:700,color:C.putih,marginBottom:20}}>
-              Akar yang <span style={{color:C.emas}}>Kuat</span>
-            </h2>
-            <p style={{fontFamily:"'IM Fell English',serif",fontStyle:"italic",fontSize:"1.05rem",color:C.kremT,opacity:.85,lineHeight:1.75,marginBottom:40}}>
-              Tarombo adalah sistem silsilah marga Batak Toba yang mencatat garis keturunan patrilineal. Database ini menyimpan relasi antar anggota melalui tabel <span style={{color:C.emas}}>person</span>, <span style={{color:C.emas}}>marriage</span>, dan <span style={{color:C.emas}}>child</span> — memungkinkan penelusuran silsilah dari generasi ke generasi.
-            </p>
-            {stats && (
-              <div className="tarombo-stats" style={{display:"flex",gap:24,justifyContent:"center",flexWrap:"wrap",marginBottom:40}}>
-                {[
-                  {v:stats.lakiLaki,  l:"Laki-laki", c:"#7EB8D4"},
-                  {v:stats.perempuan, l:"Perempuan",  c:"#D4A0B5"},
-                ].map((item,i) => (
-                  <div key={i} style={{textAlign:"center",padding:"16px 32px",border:`1px solid rgba(201,168,76,.2)`,background:"rgba(13,11,8,.4)"}}>
-                    <div style={{fontFamily:"'Cinzel Decorative',cursive",fontSize:"2rem",color:item.c,marginBottom:4}}>{item.v}</div>
-                    <div style={{fontFamily:"'Cinzel',serif",fontSize:"0.6rem",letterSpacing:"0.2em",textTransform:"uppercase",color:C.kremT,opacity:.6}}>{item.l}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-            <Link href="/tarombo" className="btn-p" style={btnPrimary}>
-              Buka Pohon Silsilah
-            </Link>
           </div>
         </RevealDiv>
       </section>
@@ -774,6 +787,30 @@ export default function HomePage() {
           </RevealDiv>
         </section>
       )}
+
+      {/* ── FAQ ── */}
+      <section id="faq" style={{position:"relative",zIndex:10,padding:"100px 56px",background:C.hitam,borderTop:`1px solid rgba(201,168,76,.1)`}}>
+        <RevealDiv>
+          <SectionHeader
+            tag="Pertanyaan Umum"
+            title="FAQ"
+            gold="Silsilah Simangunsong"
+            sub="Jawaban singkat untuk pertanyaan yang paling sering dicari di Google"
+          />
+          <div style={{maxWidth:920,margin:"0 auto",display:"grid",gap:10}}>
+            {faqItems.map((item) => (
+              <details key={item.q} style={{border:`1px solid rgba(201,168,76,.18)`,background:"rgba(26,22,18,.65)",padding:"14px 16px"}}>
+                <summary style={{fontFamily:"'Cinzel',serif",fontSize:"0.72rem",letterSpacing:"0.12em",textTransform:"uppercase",color:C.emas,cursor:"pointer"}}>
+                  {item.q}
+                </summary>
+                <p style={{marginTop:12,fontFamily:"'Cormorant Garamond',serif",fontSize:"1rem",lineHeight:1.72,color:C.kremT,opacity:.9}}>
+                  {item.a}
+                </p>
+              </details>
+            ))}
+          </div>
+        </RevealDiv>
+      </section>
 
             {/* ── CTA ──
       <section id="tentang" style={{position:"relative",zIndex:10,padding:"120px 40px",textAlign:"center",background:C.hitamL,overflow:"hidden"}}>

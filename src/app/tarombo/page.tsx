@@ -200,7 +200,7 @@ function buildLayout(data: TaromboData, maxDepth: number | null = null) {
 
 // ─── Build Focus Layout ───────────────────────────────────────────────────────
 // Tampilkan hanya: target + saudara, lalu leluhur langsung ke atas (tanpa saudara leluhur)
-function buildFocusLayout(data: TaromboData, targetPersonId: number) {
+function buildFocusLayout(data: TaromboData, targetPersonId: number, maxAncestorDepth: number | null = null) {
   const marriagesByHusband = new Map<number, Marriage[]>();
   const marriageByWife    = new Map<number, Marriage>();
   for (const m of data.marriages) {
@@ -294,6 +294,7 @@ function buildFocusLayout(data: TaromboData, targetPersonId: number) {
   }
   
   while (!seen.has(curId)) {
+    if (maxAncestorDepth !== null && chain.length >= maxAncestorDepth) break;
     seen.add(curId);
     const pm = data.marriages.find(m => m.children.some(c => c.personId === curId));
     if (!pm) break;
@@ -1459,6 +1460,7 @@ function TaromboPageContent() {
   const [focusPName,      setFocusPName]      = useState("");
   const [showHint,        setShowHint]        = useState(true);
   const [generasiLimit,   setGenerasiLimit]   = useState<number | null>(5);
+  const [focusAncestorLimit, setFocusAncestorLimit] = useState<number | null>(5);
 
   const isPanning    = useRef(false);
   const lastMouse    = useRef({x:0,y:0});
@@ -1531,8 +1533,8 @@ function TaromboPageContent() {
   const layout = useMemo(()=>{
     if (!data) return null;
     const maxDepth = !focusPId ? generasiLimit : null;
-    return focusPId ? buildFocusLayout(data, focusPId) : buildLayout(data, maxDepth);
-  }, [data, focusPId, generasiLimit]);
+    return focusPId ? buildFocusLayout(data, focusPId, focusAncestorLimit) : buildLayout(data, maxDepth);
+  }, [data, focusPId, generasiLimit, focusAncestorLimit]);
 
   const descendantIds = useMemo(() => {
     if (!data) return new Set<number>();
@@ -1560,9 +1562,10 @@ function TaromboPageContent() {
   const fitToScreen = useCallback(()=>{
     if (!layout||!containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
-    const scale = Math.min(rect.width/layout.canvasW, rect.height/layout.canvasH, 1.2) * 0.85;
+    const fitFactor = isMobile ? 0.96 : 0.85;
+    const scale = Math.min(rect.width/layout.canvasW, rect.height/layout.canvasH, 1.2) * fitFactor;
     setTransform({ scale, x:(rect.width-layout.canvasW*scale)/2, y:(rect.height-layout.canvasH*scale)/2 });
-  },[layout]);
+  },[layout, isMobile]);
 
   useEffect(()=>{ if(layout&&!didFit.current){ didFit.current=true; fitToScreen(); } },[layout,fitToScreen]);
 
@@ -1582,19 +1585,20 @@ function TaromboPageContent() {
     e.preventDefault();
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
+    const minScale = isMobile ? 0.35 : 0.15;
     
     // Posisi mouse relatif ke container
     const mouseX = e.clientX;
     const mouseY = e.clientY;
     
     setTransform(t => {
-      const newScale = Math.min(2.5, Math.max(0.15, t.scale * (e.deltaY > 0 ? 0.9 : 1.1)));
+      const newScale = Math.min(2.5, Math.max(minScale, t.scale * (e.deltaY > 0 ? 0.9 : 1.1)));
       // Zoom relatif ke posisi mouse
       const dx = mouseX - (mouseX - t.x) * (newScale / t.scale);
       const dy = mouseY - (mouseY - t.y) * (newScale / t.scale);
       return { scale: newScale, x: dx, y: dy };
     });
-  },[]);
+  },[isMobile]);
 
   // Touch — pan + pinch zoom
   const onTouchStart = useCallback((e:React.TouchEvent)=>{
@@ -1610,6 +1614,7 @@ function TaromboPageContent() {
 
   const onTouchMove = useCallback((e:React.TouchEvent)=>{
     e.preventDefault();
+    const minScale = isMobile ? 0.35 : 0.15;
     if (e.touches.length===1 && isPanning.current) {
       const dx=e.touches[0].clientX-lastTouchPos.current.x, dy=e.touches[0].clientY-lastTouchPos.current.y;
       lastTouchPos.current={x:e.touches[0].clientX,y:e.touches[0].clientY};
@@ -1624,14 +1629,14 @@ function TaromboPageContent() {
       const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
       
       setTransform(t => {
-        const newScale = Math.min(2.5, Math.max(0.15, t.scale * ratio));
+        const newScale = Math.min(2.5, Math.max(minScale, t.scale * ratio));
         // Zoom relatif ke center point
         const dx = centerX - (centerX - t.x) * (newScale / t.scale);
         const dy = centerY - (centerY - t.y) * (newScale / t.scale);
         return { scale: newScale, x: dx, y: dy };
       });
     }
-  },[]);
+  },[isMobile]);
 
   const onTouchEnd = useCallback(()=>{ isPanning.current=false; lastPinchD.current=null; },[]);
 
@@ -1644,8 +1649,9 @@ function TaromboPageContent() {
     setSelected(unit); setSearch(""); setShowSearch(false);
   },[layout]);
 
-  const focusBannerH = focusPId ? 36 : hasTruncated ? 36 : 0;
-  const topBarH = isMobile ? 56 : 64;
+  const minZoomScale = isMobile ? 0.35 : 0.15;
+  const focusBannerH = focusPId ? (isMobile ? 44 : 36) : hasTruncated ? (isMobile ? 44 : 36) : 0;
+  const topBarH = isMobile ? 60 : 64;
 
   return (
     <div style={{width:"100vw",height:"100vh",backgroundColor:C.hitam,overflow:"hidden",position:"relative",fontFamily:"'Cormorant Garamond',serif"}}>
@@ -1662,6 +1668,9 @@ function TaromboPageContent() {
         .ctrl-btn:hover{background:rgba(201,168,76,.14)!important;color:${C.emas}!important;border-color:rgba(201,168,76,.4)!important}
         .srch-item:hover{background:rgba(201,168,76,.07)!important;color:${C.emas}!important}
         .gorga-bg{background-image:repeating-linear-gradient(45deg,${C.emas} 0,${C.emas} 1px,transparent 0,transparent 50%),repeating-linear-gradient(-45deg,${C.emas} 0,${C.emas} 1px,transparent 0,transparent 50%);background-size:28px 28px}
+        @media (max-width:768px){
+          .mobile-hide{display:none!important}
+        }
       `}</style>
 
       <div className="gorga-bg" style={{position:"absolute",inset:0,opacity:.018,pointerEvents:"none"}}/>
@@ -1671,7 +1680,7 @@ function TaromboPageContent() {
         position:"absolute",top:0,left:0,right:0,height:topBarH,zIndex:20,
         background:`rgba(13,11,8,.97)`,borderBottom:`1px solid rgba(201,168,76,.14)`,
         display:"flex",alignItems:"center",justifyContent:"space-between",
-        padding:isMobile?"0 10px":"0 24px", gap:8,
+        padding:isMobile?"0 8px":"0 24px", gap:isMobile?6:8,
       }}>
         {/* Left */}
         <div style={{display:"flex",alignItems:"center",gap:isMobile?8:18,flex:1,minWidth:0,overflow:"hidden"}}>
@@ -1686,7 +1695,7 @@ function TaromboPageContent() {
 
           <h1 style={{
             fontFamily:"'Cinzel Decorative',cursive",
-            fontSize:isMobile?"0.75rem":"0.95rem",
+            fontSize:isMobile?"0.72rem":"0.95rem",
             color:C.emas,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",
           }}>
             Pohon <span style={{color:C.merahTerang}}>Silsilah</span>
@@ -1701,33 +1710,64 @@ function TaromboPageContent() {
 
         {/* Right */}
         <div style={{display:"flex",gap:8,alignItems:"center",flexShrink:0}}>
-          <select
-            value={generasiLimit === null ? "all" : String(generasiLimit)}
-            onChange={(e) => {
-              const val = e.target.value;
-              setGenerasiLimit(val === "all" ? null : parseInt(val, 10));
-              setSelected(null);
-            }}
-            title="Filter jumlah generasi"
-            style={{
-              background:"rgba(26,22,18,.96)",
-              border:`1px solid rgba(201,168,76,.25)`,
-              color:C.kremT,
-              fontFamily:"'Cinzel',serif",
-              fontSize:isMobile?"0.5rem":"0.58rem",
-              letterSpacing:"0.1em",
-              textTransform:"uppercase",
-              padding:isMobile?"6px 8px":"7px 10px",
-              outline:"none",
-              maxWidth:isMobile?92:120,
-            }}
-          >
-            <option value="3">3 Gen</option>
-            <option value="5">5 Gen</option>
-            <option value="7">7 Gen</option>
-            <option value="10">10 Gen</option>
-            <option value="all">Semua</option>
-          </select>
+          {!focusPId && (
+            <select
+              value={generasiLimit === null ? "all" : String(generasiLimit)}
+              onChange={(e) => {
+                const val = e.target.value;
+                setGenerasiLimit(val === "all" ? null : parseInt(val, 10));
+                setSelected(null);
+              }}
+              title="Filter jumlah generasi"
+              style={{
+                background:"rgba(30,26,20,.98)",
+                border:`1px solid rgba(201,168,76,.35)`,
+                color:C.kremT,
+                fontFamily:"'Cinzel',serif",
+                fontSize:isMobile?"0.56rem":"0.58rem",
+                letterSpacing:"0.1em",
+                textTransform:"uppercase",
+                padding:isMobile?"7px 8px":"7px 10px",
+                outline:"none",
+                maxWidth:isMobile?88:120,
+              }}
+            >
+              <option value="3">3 Gen</option>
+              <option value="5">5 Gen</option>
+              <option value="7">7 Gen</option>
+              <option value="10">10 Gen</option>
+              <option value="all">Semua</option>
+            </select>
+          )}
+
+          {focusPId && (
+            <select
+              value={focusAncestorLimit === null ? "all" : String(focusAncestorLimit)}
+              onChange={(e) => {
+                const val = e.target.value;
+                setFocusAncestorLimit(val === "all" ? null : parseInt(val, 10));
+                setSelected(null);
+              }}
+              title="Filter generasi ke atas saat mode fokus"
+              style={{
+                background:"rgba(30,26,20,.98)",
+                border:`1px solid rgba(201,168,76,.35)`,
+                color:C.kremT,
+                fontFamily:"'Cinzel',serif",
+                fontSize:isMobile?"0.56rem":"0.58rem",
+                letterSpacing:"0.1em",
+                textTransform:"uppercase",
+                padding:isMobile?"7px 8px":"7px 10px",
+                outline:"none",
+                maxWidth:isMobile?98:138,
+              }}
+            >
+              <option value="3">Atas 3 Gen</option>
+              <option value="5">Atas 5 Gen</option>
+              <option value="7">Atas 7 Gen</option>
+              <option value="all">Atas Semua</option>
+            </select>
+          )}
 
           {/* Mobile: icon search toggle */}
           {isMobile ? (
@@ -1765,6 +1805,7 @@ function TaromboPageContent() {
 
           {isAdmin && (
             <Link href="/tambah" className="ctrl-btn" style={{
+              display:isMobile?"none":"inline-block",
               fontFamily:"'Cinzel',serif",fontSize:isMobile?"0.5rem":"0.6rem",
               letterSpacing:"0.15em",textTransform:"uppercase",
               color:C.hitam,
@@ -1783,6 +1824,7 @@ function TaromboPageContent() {
           )}
           {!isAdmin && (
             <Link href="/tambah" className="ctrl-btn" style={{
+              display:isMobile?"none":"inline-block",
               fontFamily:"'Cinzel',serif",fontSize:isMobile?"0.5rem":"0.6rem",
               letterSpacing:"0.15em",textTransform:"uppercase",color:C.kremT,
               textDecoration:"none",border:`1px solid rgba(201,168,76,.2)`,
@@ -1885,7 +1927,7 @@ function TaromboPageContent() {
       }}>
         {[
           {l:"+", fn:()=>setTransform(t=>({...t,scale:Math.min(2.5,t.scale*1.2)}))},
-          {l:"−", fn:()=>setTransform(t=>({...t,scale:Math.max(0.15,t.scale*.8)}))},
+          {l:"−", fn:()=>setTransform(t=>({...t,scale:Math.max(minZoomScale,t.scale*.8)}))},
           {l:"⊡", fn:fitToScreen},
         ].map(b=>(
           <button key={b.l} className="ctrl-btn" onClick={b.fn} style={{
@@ -1929,10 +1971,10 @@ function TaromboPageContent() {
         <div style={{
           position:"absolute", top:topBarH, left:0, right:0, zIndex:24,
           background:`rgba(13,11,8,.97)`, borderBottom:`1px solid rgba(201,168,76,.18)`,
-          padding:"7px 20px", display:"flex", alignItems:"center", gap:12,
+          padding:isMobile?"7px 10px":"7px 20px", display:"flex", alignItems:"center", gap:12,
           animation:"fadeIn .22s ease",
         }}>
-          <span style={{fontFamily:"'IM Fell English',serif",fontStyle:"italic",fontSize:"0.75rem",color:C.kremT,opacity:.7,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+          <span style={{fontFamily:"'IM Fell English',serif",fontStyle:"italic",fontSize:isMobile?"0.68rem":"0.75rem",color:C.kremT,opacity:.82,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:isMobile?"normal":"nowrap",lineHeight:isMobile?1.35:1.2}}>
             Menampilkan <span style={{color:C.emas,fontStyle:"normal"}}>{generasiLimit ?? "semua"} generasi</span> · Ubah filter generasi di kanan atas untuk memperluas tampilan
           </span>
         </div>
@@ -1943,7 +1985,7 @@ function TaromboPageContent() {
         <div style={{
           position:"absolute", top:topBarH, left:0, right:0, zIndex:25,
           background:`rgba(92,14,14,.95)`, borderBottom:`1px solid rgba(201,168,76,.3)`,
-          padding:"8px 20px", display:"flex", alignItems:"center", gap:12,
+          padding:isMobile?"8px 10px":"8px 20px", display:"flex", alignItems:"center", gap:isMobile?8:12,
           animation:"fadeIn .22s ease",
         }}>
           <span style={{fontFamily:"'Cinzel',serif",fontSize:"0.55rem",letterSpacing:"0.18em",textTransform:"uppercase",color:C.emas,flexShrink:0}}>
@@ -1953,7 +1995,7 @@ function TaromboPageContent() {
             Silsilah: <span style={{color:C.emasM}}>{focusPName}</span>
           </span>
           <span style={{fontFamily:"'IM Fell English',serif",fontStyle:"italic",fontSize:"0.72rem",color:C.kremT,opacity:.6,display:isMobile?"none":"block",flexShrink:0}}>
-            Menampilkan leluhur langsung tanpa saudara generasi atas
+            Menampilkan ke atas: {focusAncestorLimit ?? "semua"} generasi · tanpa saudara generasi atas
           </span>
           <button onClick={exitFocus} style={{
             fontFamily:"'Cinzel',serif",fontSize:"0.55rem",letterSpacing:"0.15em",textTransform:"uppercase",
@@ -1962,6 +2004,28 @@ function TaromboPageContent() {
           }}>× Lihat Semua</button>
         </div>
       )}
+
+      {/* ── Mobile Quick Add ── */}
+      <Link href="/tambah" style={{
+        position:"absolute",
+        right:12,
+        bottom:isMobile&&selected ? "calc(68vh + 12px)" : 24,
+        zIndex:22,
+        display:isMobile ? "flex" : "none",
+        alignItems:"center",
+        justifyContent:"center",
+        width:44,
+        height:44,
+        borderRadius:999,
+        textDecoration:"none",
+        color:C.hitam,
+        fontFamily:"'Cinzel',serif",
+        fontSize:"1.15rem",
+        background:`linear-gradient(135deg,${C.emas},${C.emasM})`,
+        border:`1px solid rgba(13,11,8,.35)`,
+        boxShadow:"0 8px 18px rgba(0,0,0,.35)",
+        transition:"bottom .3s",
+      }}>+</Link>
 
       {/* ── UX Hint (dismissable) ── */}
       {showHint && !focusPId && !selected && (
