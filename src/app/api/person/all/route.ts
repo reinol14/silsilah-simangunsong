@@ -293,11 +293,19 @@ export async function GET(request: NextRequest) {
 
     const sorted = sortedIds.map(id => personById.get(id)!).filter(Boolean);
 
+    // Orang eksternal = tidak punya parent di pohon ini, tetapi punya generasi
+    // hasil mengikuti pasangannya (jadi bukan garis keturunan langsung).
+    const isExternalSpouse = (personId: number) => {
+      return !childOfMap.has(personId) && (depthMap.get(personId) ?? 0) !== 0;
+    };
+
     // ── Build result ───────────────────────────────────────────────────────
     let result = sorted.map(p => ({
       ...p,
       generasi:   depthMap.get(p.id) ?? 0,
-      isIstri:    wifeIds.has(p.id),
+      // `isIstri` dipakai UI sebagai penanda baris pasangan (secondary).
+      // Jangan bergantung pada gender: perempuan keturunan tetap primary.
+      isIstri:    isExternalSpouse(p.id),
       // PERBAIKAN POLIGAMI: Return array semua pasangan (bisa lebih dari 1)
       pasangan:   p.marriagesAsHusband.length > 0 
                     ? p.marriagesAsHusband.map(m => m.wife)

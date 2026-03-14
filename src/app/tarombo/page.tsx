@@ -42,6 +42,29 @@ const C = {
 const COUPLE_W = 320; const SINGLE_W = 188;
 const CARD_H = 108;   const H_GAP = 52; const V_GAP = 144;
 
+function getLineagePriority(marriage: Marriage, descendantIds: Set<number>) {
+  const husbandIsDescendant = descendantIds.has(marriage.husbandId);
+  const wifeIsDescendant = descendantIds.has(marriage.wifeId);
+
+  if (wifeIsDescendant && !husbandIsDescendant) {
+    return {
+      primary: marriage.wife,
+      secondary: marriage.husband,
+      primaryId: marriage.wifeId,
+      secondaryId: marriage.husbandId,
+      singleLineageSide: true,
+    };
+  }
+
+  return {
+    primary: marriage.husband,
+    secondary: marriage.wife,
+    primaryId: marriage.husbandId,
+    secondaryId: marriage.wifeId,
+    singleLineageSide: husbandIsDescendant !== wifeIsDescendant,
+  };
+}
+
 // ─── Build layout ─────────────────────────────────────────────────────────────
 function buildLayout(data: TaromboData, maxDepth: number | null = null) {
   const marriagesByHusband = new Map<number, Marriage[]>();
@@ -465,12 +488,16 @@ function PolygamyCard({ unit, selected, onSelect }: { unit: FamilyUnit; selected
   );
 }
 
-function CoupleCard({ unit, selected, onSelect }: { unit: FamilyUnit; selected: boolean; onSelect: (u: FamilyUnit) => void }) {
+function CoupleCard({ unit, selected, onSelect, descendantIds }: { unit: FamilyUnit; selected: boolean; onSelect: (u: FamilyUnit) => void; descendantIds: Set<number> }) {
   const { x, y, w, h, marriage } = unit;
   if (!marriage) return null;
-  const { husband, wife } = marriage;
-  const initH = husband.nama.split(" ").slice(0,2).map(w=>w[0]).join("");
-  const initW = wife.nama.split(" ").slice(0,2).map(w=>w[0]).join("");
+  const { primary, secondary, singleLineageSide } = getLineagePriority(marriage, descendantIds);
+  const initPrimary = primary.nama.split(" ").slice(0,2).map(w=>w[0]).join("");
+  const initSecondary = secondary.nama.split(" ").slice(0,2).map(w=>w[0]).join("");
+  const primaryAccent = primary.jenisKelamin === "LAKI_LAKI" ? C.biru : C.pink;
+  const secondaryAccent = secondary.jenisKelamin === "LAKI_LAKI" ? C.biru : C.pink;
+  const primaryLabel = singleLineageSide ? "KETURUNAN" : (primary.jenisKelamin === "LAKI_LAKI" ? "SUAMI" : "ISTRI");
+  const secondaryLabel = singleLineageSide ? "PASANGAN" : (secondary.jenisKelamin === "LAKI_LAKI" ? "SUAMI" : "ISTRI");
   const short = (n:string, max=17) => n.length > max ? n.slice(0,max-1)+"…" : n;
   return (
     <g transform={`translate(${x},${y})`} onClick={()=>onSelect(unit)} style={{cursor:"pointer"}} className="pnode">
@@ -478,19 +505,19 @@ function CoupleCard({ unit, selected, onSelect }: { unit: FamilyUnit; selected: 
       <rect x={0} y={0} width={w} height={h} rx={4} fill={selected?"rgba(92,14,14,0.95)":"rgba(28,24,18,0.97)"} stroke={selected?C.emas:"rgba(201,168,76,0.42)"} strokeWidth="1.2"/>
       <rect x={0} y={0} width={w} height={4} rx={4} fill={C.emas} opacity=".7"/>
       <line x1={w/2} y1={10} x2={w/2} y2={h-10} stroke="rgba(201,168,76,0.22)" strokeWidth="1"/>
-      <rect x={0} y={4} width={4} height={h-4} fill={C.biru} opacity=".45"/>
+      <rect x={0} y={4} width={4} height={h-4} fill={primaryAccent} opacity=".45"/>
       <circle cx={30} cy={h/2} r={21} fill="rgba(10,8,5,.9)" stroke="rgba(126,184,212,.4)" strokeWidth="1.2"/>
-      {husband.foto ? <image href={husband.foto} x={9} y={h/2-21} width={42} height={42} preserveAspectRatio="xMidYMid slice"/> : <text x={30} y={h/2+5} textAnchor="middle" fill={C.biru} fontSize="13" fontFamily="'Cinzel Decorative',cursive" fontWeight="700">{initH}</text>}
-      <text x={58} y={h/2-8} fill={C.kremT} fontSize="11" fontFamily="'Cinzel',serif" fontWeight="600">{short(husband.nama,16)}</text>
-      <text x={58} y={h/2+6} fill={C.biru} fontSize="8.5" fontFamily="'Cinzel',serif" opacity=".85">SUAMI</text>
-      {husband.tanggalLahir && <text x={58} y={h/2+19} fill={C.emasT} fontSize="8" fontFamily="'IM Fell English',serif" fontStyle="italic">b.{new Date(husband.tanggalLahir).getFullYear()}</text>}
+      {primary.foto ? <image href={primary.foto} x={9} y={h/2-21} width={42} height={42} preserveAspectRatio="xMidYMid slice"/> : <text x={30} y={h/2+5} textAnchor="middle" fill={primaryAccent} fontSize="13" fontFamily="'Cinzel Decorative',cursive" fontWeight="700">{initPrimary}</text>}
+      <text x={58} y={h/2-8} fill={C.kremT} fontSize="11" fontFamily="'Cinzel',serif" fontWeight="600">{short(primary.nama,16)}</text>
+      <text x={58} y={h/2+6} fill={primaryAccent} fontSize="8.5" fontFamily="'Cinzel',serif" opacity=".9">{primaryLabel}</text>
+      {primary.tanggalLahir && <text x={58} y={h/2+19} fill={C.emasT} fontSize="8" fontFamily="'IM Fell English',serif" fontStyle="italic">b.{new Date(primary.tanggalLahir).getFullYear()}</text>}
       <text x={w/2} y={h/2+6} textAnchor="middle" fill={C.emas} fontSize="13" fontFamily="'Cinzel',serif" opacity=".75">✦</text>
-      <rect x={w-4} y={4} width={4} height={h-4} fill={C.pink} opacity=".45"/>
+      <rect x={w-4} y={4} width={4} height={h-4} fill={secondaryAccent} opacity=".45"/>
       <circle cx={w-30} cy={h/2} r={21} fill="rgba(10,8,5,.9)" stroke="rgba(212,160,181,.4)" strokeWidth="1.2"/>
-      {wife.foto ? <image href={wife.foto} x={w-51} y={h/2-21} width={42} height={42} preserveAspectRatio="xMidYMid slice"/> : <text x={w-30} y={h/2+5} textAnchor="middle" fill={C.pink} fontSize="13" fontFamily="'Cinzel Decorative',cursive" fontWeight="700">{initW}</text>}
-      <text x={w/2+14} y={h/2-8} fill={C.kremT} fontSize="11" fontFamily="'Cinzel',serif" fontWeight="600" textAnchor="start">{short(wife.nama,16)}</text>
-      <text x={w/2+14} y={h/2+6} fill={C.pink} fontSize="8.5" fontFamily="'Cinzel',serif" opacity=".85" textAnchor="start">ISTRI</text>
-      {wife.tanggalLahir && <text x={w/2+14} y={h/2+19} fill={C.emasT} fontSize="8" fontFamily="'IM Fell English',serif" fontStyle="italic" textAnchor="start">b.{new Date(wife.tanggalLahir).getFullYear()}</text>}
+      {secondary.foto ? <image href={secondary.foto} x={w-51} y={h/2-21} width={42} height={42} preserveAspectRatio="xMidYMid slice"/> : <text x={w-30} y={h/2+5} textAnchor="middle" fill={secondaryAccent} fontSize="13" fontFamily="'Cinzel Decorative',cursive" fontWeight="700">{initSecondary}</text>}
+      <text x={w/2+14} y={h/2-8} fill={C.kremT} fontSize="11" fontFamily="'Cinzel',serif" fontWeight="600" textAnchor="start">{short(secondary.nama,16)}</text>
+      <text x={w/2+14} y={h/2+6} fill={secondaryAccent} fontSize="8.5" fontFamily="'Cinzel',serif" opacity=".85" textAnchor="start">{secondaryLabel}</text>
+      {secondary.tanggalLahir && <text x={w/2+14} y={h/2+19} fill={C.emasT} fontSize="8" fontFamily="'IM Fell English',serif" fontStyle="italic" textAnchor="start">b.{new Date(secondary.tanggalLahir).getFullYear()}</text>}
       {unit.children.length > 0 && (<>
         <rect x={w/2-22} y={h-18} width={44} height={15} rx={7.5} fill="rgba(92,14,14,0.75)" stroke="rgba(201,168,76,0.45)" strokeWidth=".9"/>
         <text x={w/2} y={h-7} textAnchor="middle" fill={C.emasM} fontSize="8.5" fontFamily="'Cinzel',serif">{unit.children.length} anak</text>
@@ -1088,9 +1115,10 @@ function AddSpouseForm({ person, onSuccess, onCancel }: {
 }
 
 // ─── Detail Panel ─────────────────────────────────────────────────────────────
-function DetailPanel({ unit, allMarriages, onClose, isMobile, isAdmin, onDelete, onAddChildSuccess, onFocus }: {
+function DetailPanel({ unit, allMarriages, descendantIds, onClose, isMobile, isAdmin, onDelete, onAddChildSuccess, onFocus }: {
   unit: FamilyUnit;
   allMarriages: Marriage[];
+  descendantIds: Set<number>;
   onClose: ()=>void;
   isMobile: boolean;
   isAdmin: boolean;
@@ -1102,6 +1130,10 @@ function DetailPanel({ unit, allMarriages, onClose, isMobile, isAdmin, onDelete,
   const [addChildMode,       setAddChildMode]       = useState(false);
   const [addSpouseMode,      setAddSpouseMode]      = useState(false);
   const [insertBetweenTarget, setInsertBetweenTarget] = useState<{personId:number;personNama:string}|null>(null);
+  const lineagePriority = unit.marriage ? getLineagePriority(unit.marriage, descendantIds) : null;
+  const couplePeople = isCouple
+    ? [lineagePriority?.primary ?? unit.marriage!.husband, lineagePriority?.secondary ?? unit.marriage!.wife]
+    : [unit.person!];
   const panelStyle: React.CSSProperties = isMobile ? {
     position:"fixed", bottom:0, left:0, right:0,
     maxHeight:"50vh", overflowY:"auto",
@@ -1173,9 +1205,9 @@ function DetailPanel({ unit, allMarriages, onClose, isMobile, isAdmin, onDelete,
             {unit.generasi && <span style={{marginLeft:8,color:C.emas,fontWeight:600}}>• G-{unit.generasi}</span>}
           </p>
           <h3 style={{fontFamily:"'Cinzel Decorative',cursive",fontSize:"0.82rem",color:C.putih,lineHeight:1.35}}>
-            {isCouple?unit.marriage!.husband.nama:unit.person!.nama}
+            {isCouple?(lineagePriority?.primary.nama ?? unit.marriage!.husband.nama):unit.person!.nama}
           </h3>
-          {isCouple && <p style={{fontFamily:"'Cinzel',serif",fontSize:"0.72rem",color:C.pink,marginTop:3}}>✦ {unit.marriage!.wife.nama}</p>}
+          {isCouple && <p style={{fontFamily:"'Cinzel',serif",fontSize:"0.72rem",color:C.pink,marginTop:3}}>✦ {lineagePriority?.secondary.nama ?? unit.marriage!.wife.nama}</p>}
         </div>
         <button onClick={onClose} style={{background:"none",border:"none",color:C.emasT,cursor:"pointer",fontSize:"1.5rem",lineHeight:1,padding:"0 4px",flexShrink:0}}>×</button>
       </div>
@@ -1183,23 +1215,25 @@ function DetailPanel({ unit, allMarriages, onClose, isMobile, isAdmin, onDelete,
       <div style={{padding:"12px 16px",display:"flex",flexDirection:"column",gap:10}}>
         {/* Avatars */}
         <div style={{display:"flex",justifyContent:"center",gap:isCouple?16:0,marginBottom:2}}>
-          {[isCouple?unit.marriage!.husband:unit.person!, ...(isCouple?[unit.marriage!.wife]:[])].map((p,i)=>{
+          {couplePeople.map((p,i)=>{
             const acc = p.jenisKelamin==="LAKI_LAKI"?C.biru:C.pink;
             return (
               <div key={i} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
                 <div style={{width:54,height:54,borderRadius:"50%",background:`linear-gradient(135deg,${C.merahTua},${C.hitam})`,border:`2px solid ${acc}`,display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden"}}>
                   {p.foto?<img src={p.foto} alt={p.nama} style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span style={{fontFamily:"'Cinzel Decorative',cursive",fontSize:"1.1rem",color:acc}}>{p.nama.charAt(0)}</span>}
                 </div>
-                <span style={{fontFamily:"'Cinzel',serif",fontSize:"0.56rem",color:acc,letterSpacing:"0.1em"}}>{p.jenisKelamin==="LAKI_LAKI"?"Suami":"Istri"}</span>
+                <span style={{fontFamily:"'Cinzel',serif",fontSize:"0.56rem",color:acc,letterSpacing:"0.1em"}}>
+                  {isCouple ? (i===0 ? "Utama" : "Pasangan") : (p.jenisKelamin==="LAKI_LAKI"?"Laki-laki":"Perempuan")}
+                </span>
               </div>
             );
           })}
         </div>
 
         {/* Info */}
-        {(isCouple?[unit.marriage!.husband,unit.marriage!.wife]:[unit.person!]).map((p,pi)=>(
+        {couplePeople.map((p,pi)=>(
           <div key={pi}>
-            {isCouple && <p style={{fontFamily:"'Cinzel',serif",fontSize:"0.6rem",color:pi===0?C.biru:C.pink,letterSpacing:"0.1em",marginBottom:5,borderBottom:`1px solid rgba(201,168,76,.08)`,paddingBottom:3}}>{p.nama}</p>}
+            {isCouple && <p style={{fontFamily:"'Cinzel',serif",fontSize:"0.6rem",color:pi===0?C.biru:C.pink,letterSpacing:"0.1em",marginBottom:5,borderBottom:`1px solid rgba(201,168,76,.08)`,paddingBottom:3}}>{pi===0?"Utama":"Pasangan"}: {p.nama}</p>}
             {([
               p.tanggalLahir&&{l:"Lahir",v:new Date(p.tanggalLahir).toLocaleDateString("id-ID",{day:"numeric",month:"long",year:"numeric"})},
               p.tanggalWafat&&{l:"Wafat",v:new Date(p.tanggalWafat).toLocaleDateString("id-ID",{day:"numeric",month:"long",year:"numeric"})},
@@ -1216,7 +1250,7 @@ function DetailPanel({ unit, allMarriages, onClose, isMobile, isAdmin, onDelete,
         {/* Parents */}
         {(() => {
           // Cari orang tua dari couple atau person
-          const personId = isCouple ? unit.marriage!.husbandId : unit.person!.id;
+          const personId = isCouple ? (lineagePriority?.primaryId ?? unit.marriage!.husbandId) : unit.person!.id;
           const parentMarriage = allMarriages.find(m => m.children.some(c => c.personId === personId));
           
           if (!parentMarriage) return null;
@@ -1268,7 +1302,7 @@ function DetailPanel({ unit, allMarriages, onClose, isMobile, isAdmin, onDelete,
 
         {/* Buttons — Profil */}
         <div style={{display:"flex",gap:8,marginTop:4}}>
-          {(isCouple?[unit.marriage!.husband,unit.marriage!.wife]:[unit.person!]).map((p,i)=>(
+          {couplePeople.map((p,i)=>(
             <Link key={i} href={`/profil/${p.id}`} style={{
               flex:1,fontFamily:"'Cinzel',serif",fontSize:"0.6rem",letterSpacing:"0.12em",textTransform:"uppercase",
               color:i===0?C.hitam:C.emas,
@@ -1277,14 +1311,14 @@ function DetailPanel({ unit, allMarriages, onClose, isMobile, isAdmin, onDelete,
               padding:isMobile?"12px 6px":"10px 6px",textDecoration:"none",textAlign:"center",display:"block",
               clipPath:"polygon(6px 0%,100% 0%,calc(100% - 6px) 100%,0% 100%)",
             }}>
-              {isCouple?(i===0?"Profil Suami":"Profil Istri"):"Lihat Profil"}
+              {isCouple?(i===0?"Profil Utama":"Profil Pasangan"):"Lihat Profil"}
             </Link>
           ))}
         </div>
 
         {/* Fokus Silsilah */}
         {(() => {
-          const focusPerson = isCouple ? unit.marriage!.husband : unit.person!;
+          const focusPerson = isCouple ? (lineagePriority?.primary ?? unit.marriage!.husband) : unit.person!;
           return (
             <button onClick={()=>onFocus(focusPerson.id, focusPerson.nama)} style={{
               width:"100%",fontFamily:"'Cinzel',serif",fontSize:"0.58rem",letterSpacing:"0.14em",
@@ -1314,10 +1348,7 @@ function DetailPanel({ unit, allMarriages, onClose, isMobile, isAdmin, onDelete,
 
             {/* Edit buttons */}
             <div style={{display:"flex",gap:6,marginBottom:6,flexWrap:"wrap"}}>
-              {(isCouple
-                ? [unit.marriage!.husband, unit.marriage!.wife]
-                : [unit.person!]
-              ).map((p,i)=>(
+              {couplePeople.map((p,i)=>(
                 <a
                   key={i}
                   href={`/admin/edit/${p.id}`}
@@ -1330,7 +1361,7 @@ function DetailPanel({ unit, allMarriages, onClose, isMobile, isAdmin, onDelete,
                     transition:"all .2s",
                   }}
                 >
-                  {isCouple?(i===0?"Edit Suami":"Edit Istri"):"Edit Data"}
+                  {isCouple?(i===0?"Edit Utama":"Edit Pasangan"):"Edit Data"}
                 </a>
               ))}
             </div>
@@ -1370,10 +1401,7 @@ function DetailPanel({ unit, allMarriages, onClose, isMobile, isAdmin, onDelete,
 
             {/* Hapus buttons */}
             <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-              {(isCouple
-                ? [unit.marriage!.husband, unit.marriage!.wife]
-                : [unit.person!]
-              ).map((p,i)=>(
+              {couplePeople.map((p,i)=>(
                 <button
                   key={i}
                   onClick={()=>onDelete(p.id, p.nama)}
@@ -1386,7 +1414,7 @@ function DetailPanel({ unit, allMarriages, onClose, isMobile, isAdmin, onDelete,
                     transition:"all .2s",
                   }}
                 >
-                  {isCouple?(i===0?"Hapus Suami":"Hapus Istri"):"Hapus"}
+                  {isCouple?(i===0?"Hapus Utama":"Hapus Pasangan"):"Hapus"}
                 </button>
               ))}
             </div>
@@ -1413,8 +1441,7 @@ function TaromboPageContent() {
   const [focusPId,        setFocusPId]        = useState<number|null>(null);
   const [focusPName,      setFocusPName]      = useState("");
   const [showHint,        setShowHint]        = useState(true);
-  const [showAllGenerasi, setShowAllGenerasi] = useState(false);
-  const MAX_GENERASI = 10;
+  const [generasiLimit,   setGenerasiLimit]   = useState<number | null>(5);
 
   const isPanning    = useRef(false);
   const lastMouse    = useRef({x:0,y:0});
@@ -1486,14 +1513,19 @@ function TaromboPageContent() {
 
   const layout = useMemo(()=>{
     if (!data) return null;
-    const maxDepth = (!focusPId && !showAllGenerasi) ? MAX_GENERASI : null;
+    const maxDepth = !focusPId ? generasiLimit : null;
     return focusPId ? buildFocusLayout(data, focusPId) : buildLayout(data, maxDepth);
-  }, [data, focusPId, showAllGenerasi]);
+  }, [data, focusPId, generasiLimit]);
+
+  const descendantIds = useMemo(() => {
+    if (!data) return new Set<number>();
+    return new Set(data.marriages.flatMap(m => m.children.map(c => c.personId)));
+  }, [data]);
 
   const hasTruncated = useMemo(()=>{
-    if (!layout || showAllGenerasi || focusPId) return false;
+    if (!layout || focusPId || generasiLimit === null) return false;
     return layout.allUnits.some(u => u.truncated);
-  }, [layout, showAllGenerasi, focusPId]);
+  }, [layout, focusPId, generasiLimit]);
 
   // Auto-fit saat mode fokus berubah
   useEffect(()=>{ didFit.current=false; setSelected(null); }, [focusPId]);
@@ -1595,7 +1627,7 @@ function TaromboPageContent() {
     setSelected(unit); setSearch(""); setShowSearch(false);
   },[layout]);
 
-  const focusBannerH = focusPId ? 36 : (hasTruncated || showAllGenerasi) ? 36 : 0;
+  const focusBannerH = focusPId ? 36 : hasTruncated ? 36 : 0;
   const topBarH = isMobile ? 56 : 64;
 
   return (
@@ -1652,6 +1684,34 @@ function TaromboPageContent() {
 
         {/* Right */}
         <div style={{display:"flex",gap:8,alignItems:"center",flexShrink:0}}>
+          <select
+            value={generasiLimit === null ? "all" : String(generasiLimit)}
+            onChange={(e) => {
+              const val = e.target.value;
+              setGenerasiLimit(val === "all" ? null : parseInt(val, 10));
+              setSelected(null);
+            }}
+            title="Filter jumlah generasi"
+            style={{
+              background:"rgba(26,22,18,.96)",
+              border:`1px solid rgba(201,168,76,.25)`,
+              color:C.kremT,
+              fontFamily:"'Cinzel',serif",
+              fontSize:isMobile?"0.5rem":"0.58rem",
+              letterSpacing:"0.1em",
+              textTransform:"uppercase",
+              padding:isMobile?"6px 8px":"7px 10px",
+              outline:"none",
+              maxWidth:isMobile?92:120,
+            }}
+          >
+            <option value="3">3 Gen</option>
+            <option value="5">5 Gen</option>
+            <option value="7">7 Gen</option>
+            <option value="10">10 Gen</option>
+            <option value="all">Semua</option>
+          </select>
+
           {/* Mobile: icon search toggle */}
           {isMobile ? (
             <button onClick={()=>{ setShowSearch(s=>!s); setTimeout(()=>searchRef.current?.focus(),60); }}
@@ -1790,7 +1850,7 @@ function TaromboPageContent() {
                 }
                 // Render couple card atau single card
                 return unit.marriage
-                  ?<CoupleCard key={unit.id} unit={unit} selected={selected?.id===unit.id} onSelect={setSelected}/>
+                  ?<CoupleCard key={unit.id} unit={unit} selected={selected?.id===unit.id} onSelect={setSelected} descendantIds={descendantIds}/>
                   :<SingleCard key={unit.id} unit={unit} selected={selected?.id===unit.id} onSelect={setSelected}/>
               })}
             </g>
@@ -1835,7 +1895,7 @@ function TaromboPageContent() {
           transition:"right .3s",
         }}>
           {!isMobile&&<p style={{fontFamily:"'Cinzel',serif",fontSize:"0.54rem",letterSpacing:"0.25em",textTransform:"uppercase",color:C.emasT,marginBottom:10}}>Keterangan</p>}
-          {[{c:C.biru,l:"Suami"},{c:C.pink,l:"Istri"},{c:C.emas,l:"✦ Pasangan"}].map(i=>(
+          {[{c:C.emas,l:"Keturunan (utama)"},{c:C.kremT,l:"Pasangan (sekunder)"},{c:C.emas,l:"✦ Ikatan Pasangan"}].map(i=>(
             <div key={i.l} style={{display:"flex",alignItems:"center",gap:8,marginBottom:isMobile?4:6}}>
               <div style={{width:14,height:3,background:i.c,opacity:.8}}/>
               <span style={{fontFamily:"'Cinzel',serif",fontSize:isMobile?"0.52rem":"0.58rem",color:C.kremT,opacity:.75}}>{i.l}</span>
@@ -1856,30 +1916,8 @@ function TaromboPageContent() {
           animation:"fadeIn .22s ease",
         }}>
           <span style={{fontFamily:"'IM Fell English',serif",fontStyle:"italic",fontSize:"0.75rem",color:C.kremT,opacity:.7,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-            Menampilkan <span style={{color:C.emas,fontStyle:"normal"}}>{MAX_GENERASI} generasi pertama</span> · Masih ada generasi yang tersembunyi
+            Menampilkan <span style={{color:C.emas,fontStyle:"normal"}}>{generasiLimit ?? "semua"} generasi</span> · Ubah filter generasi di kanan atas untuk memperluas tampilan
           </span>
-          <button onClick={()=>setShowAllGenerasi(true)} style={{
-            fontFamily:"'Cinzel',serif",fontSize:"0.55rem",letterSpacing:"0.15em",textTransform:"uppercase",
-            color:C.hitam,background:`linear-gradient(135deg,${C.emas},${C.emasM})`,
-            border:"none",padding:"5px 14px",cursor:"pointer",flexShrink:0,transition:"all .2s",whiteSpace:"nowrap",
-          }}>Muat Semua</button>
-        </div>
-      )}
-      {showAllGenerasi && !focusPId && (
-        <div style={{
-          position:"absolute", top:topBarH, left:0, right:0, zIndex:24,
-          background:`rgba(13,11,8,.97)`, borderBottom:`1px solid rgba(201,168,76,.18)`,
-          padding:"7px 20px", display:"flex", alignItems:"center", gap:12,
-          animation:"fadeIn .22s ease",
-        }}>
-          <span style={{fontFamily:"'IM Fell English',serif",fontStyle:"italic",fontSize:"0.75rem",color:C.kremT,opacity:.7,flex:1}}>
-            Menampilkan <span style={{color:C.emas,fontStyle:"normal"}}>semua generasi</span>
-          </span>
-          <button onClick={()=>setShowAllGenerasi(false)} style={{
-            fontFamily:"'Cinzel',serif",fontSize:"0.55rem",letterSpacing:"0.15em",textTransform:"uppercase",
-            color:C.kremT,background:"rgba(13,11,8,.5)",border:`1px solid rgba(201,168,76,.25)`,
-            padding:"5px 12px",cursor:"pointer",flexShrink:0,transition:"all .2s",whiteSpace:"nowrap",
-          }}>× Batasi {MAX_GENERASI} Generasi</button>
         </div>
       )}
 
@@ -1931,7 +1969,7 @@ function TaromboPageContent() {
       )}
 
       {/* ── Detail Panel ── */}
-      {selected&&data&&<DetailPanel unit={selected} allMarriages={data.marriages} onClose={()=>setSelected(null)} isMobile={isMobile} isAdmin={isAdmin} onDelete={handleDelete} onAddChildSuccess={fetchTarombo} onFocus={activateFocus}/>}
+      {selected&&data&&<DetailPanel unit={selected} allMarriages={data.marriages} descendantIds={descendantIds} onClose={()=>setSelected(null)} isMobile={isMobile} isAdmin={isAdmin} onDelete={handleDelete} onAddChildSuccess={fetchTarombo} onFocus={activateFocus}/>} 
 
       {/* Ulos border */}
       <div style={{position:"absolute",bottom:0,left:0,right:0,height:4,zIndex:10,
