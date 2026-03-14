@@ -22,6 +22,7 @@ interface FamilyUnit {
   id: string; marriage?: Marriage; person?: Person;
   x: number; y: number; w: number; h: number;
   children: FamilyUnit[]; childPersonIds: number[];
+  lineagePersonId?: number;
   urutanAnak?: number | null;
   truncated?: boolean;
   generasi?: number;
@@ -116,6 +117,7 @@ function buildLayout(data: TaromboData, maxDepth: number | null = null) {
           x: 0, y: 0, w: polygamyWidth, h: CARD_H,
           children: allChildrenGrouped.flat(), // semua children dalam 1 array
           childPersonIds: marriages.flatMap(m => m.children.map(c => c.personId)),
+          lineagePersonId: person.id,
           urutanAnak,
         };
       }
@@ -123,7 +125,7 @@ function buildLayout(data: TaromboData, maxDepth: number | null = null) {
       // KASUS NORMAL: Jika hanya 1 pernikahan
       const marriage = marriages[0];
       const childUnits = marriage.children.map(c => buildUnit(c.person, c.urutanAnak, depth + 1));
-      return { id:`m-${marriage.id}`, marriage, x:0, y:0, w:COUPLE_W, h:CARD_H, children:childUnits, childPersonIds:marriage.children.map(c=>c.personId), urutanAnak };
+      return { id:`m-${marriage.id}`, marriage, x:0, y:0, w:COUPLE_W, h:CARD_H, children:childUnits, childPersonIds:marriage.children.map(c=>c.personId), lineagePersonId: person.id, urutanAnak };
     }
     
     // Jika perempuan: periksa apakah dia istri dalam suatu pernikahan
@@ -131,9 +133,9 @@ function buildLayout(data: TaromboData, maxDepth: number | null = null) {
     const marriageAsWife = marriageByWife.get(person.id);
     if (marriageAsWife && !childPersonIds.has(marriageAsWife.husbandId)) {
       const childUnits = marriageAsWife.children.map(c => buildUnit(c.person, c.urutanAnak, depth + 1));
-      return { id:`m-${marriageAsWife.id}`, marriage:marriageAsWife, x:0, y:0, w:COUPLE_W, h:CARD_H, children:childUnits, childPersonIds:marriageAsWife.children.map(c=>c.personId), urutanAnak };
+      return { id:`m-${marriageAsWife.id}`, marriage:marriageAsWife, x:0, y:0, w:COUPLE_W, h:CARD_H, children:childUnits, childPersonIds:marriageAsWife.children.map(c=>c.personId), lineagePersonId: person.id, urutanAnak };
     }
-    return { id:`p-${person.id}`, person, x:0, y:0, w:SINGLE_W, h:CARD_H, children:[], childPersonIds:[], urutanAnak };
+    return { id:`p-${person.id}`, person, x:0, y:0, w:SINGLE_W, h:CARD_H, children:[], childPersonIds:[], lineagePersonId: person.id, urutanAnak };
   }
 
   const rootUnits: FamilyUnit[] = roots.reduce((acc: FamilyUnit[], p) => {
@@ -238,6 +240,7 @@ function buildFocusLayout(data: TaromboData, targetPersonId: number) {
           x: 0, y: 0, w: polygamyWidth, h: CARD_H,
           children: allChildrenGrouped.flat(),
           childPersonIds: marriages.flatMap(m => m.children.map(c => c.personId)),
+          lineagePersonId: person.id,
           urutanAnak,
         };
       }
@@ -245,14 +248,14 @@ function buildFocusLayout(data: TaromboData, targetPersonId: number) {
       // KASUS NORMAL: Jika hanya 1 pernikahan
       const marriage = marriages[0];
       const childUnits = marriage.children.map(c => buildSubUnit(c.person, c.urutanAnak));
-      return { id:`m-${marriage.id}`, marriage, x:0, y:0, w:COUPLE_W, h:CARD_H, children:childUnits, childPersonIds:marriage.children.map(c=>c.personId), urutanAnak };
+      return { id:`m-${marriage.id}`, marriage, x:0, y:0, w:COUPLE_W, h:CARD_H, children:childUnits, childPersonIds:marriage.children.map(c=>c.personId), lineagePersonId: person.id, urutanAnak };
     }
     const mw = marriageByWife.get(person.id);
     if (mw && !childPersonIds.has(mw.husbandId)) {
       const childUnits = mw.children.map(c => buildSubUnit(c.person, c.urutanAnak));
-      return { id:`m-${mw.id}`, marriage:mw, x:0, y:0, w:COUPLE_W, h:CARD_H, children:childUnits, childPersonIds:mw.children.map(c=>c.personId), urutanAnak };
+      return { id:`m-${mw.id}`, marriage:mw, x:0, y:0, w:COUPLE_W, h:CARD_H, children:childUnits, childPersonIds:mw.children.map(c=>c.personId), lineagePersonId: person.id, urutanAnak };
     }
-    return { id:`p-${person.id}`, person, x:0, y:0, w:SINGLE_W, h:CARD_H, children:[], childPersonIds:[], urutanAnak };
+    return { id:`p-${person.id}`, person, x:0, y:0, w:SINGLE_W, h:CARD_H, children:[], childPersonIds:[], lineagePersonId: person.id, urutanAnak };
   }
 
   // Kumpulkan rantai leluhur (dari target ke atas)
@@ -491,13 +494,20 @@ function PolygamyCard({ unit, selected, onSelect }: { unit: FamilyUnit; selected
 function CoupleCard({ unit, selected, onSelect, descendantIds }: { unit: FamilyUnit; selected: boolean; onSelect: (u: FamilyUnit) => void; descendantIds: Set<number> }) {
   const { x, y, w, h, marriage } = unit;
   if (!marriage) return null;
-  const { primary, secondary, singleLineageSide } = getLineagePriority(marriage, descendantIds);
+  const fromDescendant = getLineagePriority(marriage, descendantIds);
+  const primary = unit.lineagePersonId === marriage.wifeId
+    ? marriage.wife
+    : unit.lineagePersonId === marriage.husbandId
+      ? marriage.husband
+      : fromDescendant.primary;
+  const secondary = primary.id === marriage.husbandId ? marriage.wife : marriage.husband;
+  const singleLineageSide = fromDescendant.singleLineageSide;
   const initPrimary = primary.nama.split(" ").slice(0,2).map(w=>w[0]).join("");
   const initSecondary = secondary.nama.split(" ").slice(0,2).map(w=>w[0]).join("");
   const primaryAccent = primary.jenisKelamin === "LAKI_LAKI" ? C.biru : C.pink;
   const secondaryAccent = secondary.jenisKelamin === "LAKI_LAKI" ? C.biru : C.pink;
-  const primaryLabel = singleLineageSide ? "KETURUNAN" : (primary.jenisKelamin === "LAKI_LAKI" ? "SUAMI" : "ISTRI");
-  const secondaryLabel = singleLineageSide ? "PASANGAN" : (secondary.jenisKelamin === "LAKI_LAKI" ? "SUAMI" : "ISTRI");
+  const primaryLabel = "UTAMA";
+  const secondaryLabel = "PASANGAN";
   const short = (n:string, max=17) => n.length > max ? n.slice(0,max-1)+"…" : n;
   return (
     <g transform={`translate(${x},${y})`} onClick={()=>onSelect(unit)} style={{cursor:"pointer"}} className="pnode">
@@ -1275,13 +1285,20 @@ function DetailPanel({ unit, allMarriages, descendantIds, onClose, isMobile, isA
           <div style={{borderTop:`1px solid rgba(201,168,76,.1)`,paddingTop:8,marginTop:2}}>
             <p style={{fontFamily:"'Cinzel',serif",fontSize:"0.53rem",letterSpacing:"0.2em",textTransform:"uppercase",color:C.emasT,marginBottom:7}}>Anak-anak ({unit.children.length})</p>
             {unit.children.map(child=>{
-              const p=child.person||child.marriage?.husband;
+              const lineagePerson = child.person
+                ?? (child.marriage
+                  ? (child.lineagePersonId === child.marriage.wifeId ? child.marriage.wife : child.marriage.husband)
+                  : null);
+              const childSpouse = child.marriage
+                ? (lineagePerson?.id === child.marriage.husbandId ? child.marriage.wife : child.marriage.husband)
+                : null;
+              const p = lineagePerson;
               if(!p) return null;
               return (
                 <div key={child.id} style={{display:"flex",alignItems:"center",gap:7,marginBottom:5}}>
                   <span style={{color:p.jenisKelamin==="LAKI_LAKI"?C.biru:C.pink,fontSize:"0.48rem"}}>◆</span>
                   <span style={{fontFamily:"'Cinzel',serif",fontSize:"0.68rem",color:C.kremT,flex:1}}>{p.nama}</span>
-                  {child.marriage&&<span style={{fontFamily:"'IM Fell English',serif",fontStyle:"italic",fontSize:"0.62rem",color:C.emasT}}>✦ {child.marriage.wife.nama}</span>}
+                  {childSpouse&&<span style={{fontFamily:"'IM Fell English',serif",fontStyle:"italic",fontSize:"0.62rem",color:C.emasT}}>✦ {childSpouse.nama}</span>}
                   {isAdmin&&isCouple&&(
                     <button
                       onClick={()=>setInsertBetweenTarget({personId:p.id,personNama:p.nama})}
