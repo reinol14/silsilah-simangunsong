@@ -164,6 +164,25 @@ export default function UrutanAnakListPage() {
           </p>
         </div>
 
+        <div className="fu d2" style={{ marginBottom: 18, display: "flex", justifyContent: "flex-end" }}>
+          <Link
+            href="/admin/urutan-anak/master"
+            style={{
+              fontFamily: "'Cinzel',serif",
+              fontSize: "0.62rem",
+              letterSpacing: "0.14em",
+              textTransform: "uppercase",
+              color: C.hitam,
+              background: `linear-gradient(135deg,${C.emas},${C.emasM})`,
+              textDecoration: "none",
+              padding: "10px 14px",
+              clipPath: "polygon(8px 0%,100% 0%,calc(100% - 8px) 100%,0% 100%)",
+            }}
+          >
+            Master Tambah/Edit Anak
+          </Link>
+        </div>
+
         {/* Search */}
         <div className="fu d2" style={{ marginBottom:24 }}>
           <input
