@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
           tanggalLahir: newPerson.tanggalLahir ? new Date(newPerson.tanggalLahir) : null,
           tempatLahir: newPerson.tempatLahir?.trim() || null,
           foto: newPerson.foto?.trim() || null,
-        } as any,
+        },
       });
 
       // 2. Buat pasangan orang baru
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
           tanggalLahir: newSpouse.tanggalLahir ? new Date(newSpouse.tanggalLahir) : null,
           tempatLahir: newSpouse.tempatLahir?.trim() || null,
           foto: newSpouse.foto?.trim() || null,
-        } as any,
+        },
       });
 
       // 3. Buat pernikahan antara orang baru dan pasangannya

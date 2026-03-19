@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
             },
           },
           orderBy: [
-            { urutanAnak: "asc" } as any,
+            { urutanAnak: "asc" },
             { id: "asc" },
           ],
         },

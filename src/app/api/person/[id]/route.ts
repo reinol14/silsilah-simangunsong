@@ -41,7 +41,7 @@ export async function PUT(
         tempatLahir:   tempatLahir   || null,
         foto:          foto          || null,
         bio:           bio           || null,
-      } as any,
+      },
     });
 
     return NextResponse.json({ success: true, data: person });

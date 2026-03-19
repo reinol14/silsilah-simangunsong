@@ -85,3 +85,31 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Domain Split (Public vs Admin)
+
+App ini sudah mendukung pemisahan domain:
+
+- Publik: `silsilahsimangunsong.site`
+- Admin: `admin.silsilahsimangunsong.site`
+
+### Environment Variables (Production)
+
+Tambahkan variable berikut di environment deployment:
+
+```env
+PUBLIC_HOSTNAME="silsilahsimangunsong.site"
+ADMIN_HOSTNAME="admin.silsilahsimangunsong.site"
+```
+
+### Routing Behavior
+
+- Akses path admin/auth dari domain publik akan diarahkan ke subdomain admin.
+- Akses `admin.silsilahsimangunsong.site/` otomatis diarahkan ke `/admin`.
+- Saat local development (`localhost`), pemisahan host dinonaktifkan agar tetap mudah testing.
+
+### DNS / Vercel
+
+- Tambahkan domain root `silsilahsimangunsong.site` ke project.
+- Tambahkan subdomain `admin.silsilahsimangunsong.site` ke project yang sama.
+- Pastikan DNS record untuk root dan `admin` mengarah ke deployment yang aktif.

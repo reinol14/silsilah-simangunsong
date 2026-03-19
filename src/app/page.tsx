@@ -36,9 +36,9 @@ const C = {
 };
 
 // ─── Nav links & footer ───────────────────────────────────────────────────────
-const navLinks  = [["/tarombo","Tarombo"],["#fitur","Fitur"],["#tentang","Tentang"],["#faq","FAQ"],["/cari","Cari"],["#donasi","Donasi"]];
+const navLinks  = [["/tarombo","Tarombo"],["#fitur","Fitur"],["/tentang","Tentang"],["/cari","Cari"],["#donasi","Donasi"]];
 const footerCols = [
-  { title:"Navigasi", links:[["/tarombo","Pohon Silsilah"],["/person","Daftar Anggota"],["/cari","Pencarian"],["/tambah","Tambah Anggota"]] },
+  { title:"Navigasi", links:[["/tarombo","Pohon Silsilah"],["/person","Daftar Anggota"],["/tentang","Tentang Klan"],["/cari","Pencarian"],["/tambah","Tambah Anggota"]] },
   { title:"Akses",    links:[["/login","Masuk Admin"],["/admin","Dashboard Admin"]] },
 ];
 
@@ -121,31 +121,6 @@ const usageSteps = [
   "Buka halaman Profil untuk melihat relasi orang tua, pasangan, anak, dan koneksi keturunan.",
   "Jika ada data yang perlu diperbarui, hubungi pengelola agar diverifikasi sebelum dipublikasikan.",
 ];
-
-const faqItems = [
-  {
-    q: "Apa itu Marga Simangunsong?",
-    a: "Simangunsong adalah salah satu marga dalam masyarakat Batak Toba. Marga diwariskan secara patrilineal dari ayah kepada anak-anak dan menjadi identitas penting dalam partuturan dan adat.",
-  },
-  {
-    q: "Apa itu tarombo Batak Toba?",
-    a: "Tarombo adalah catatan silsilah yang menampilkan hubungan antar generasi dalam marga. Tarombo membantu memahami kedudukan kekerabatan dan hubungan adat di tengah keluarga besar.",
-  },
-  {
-    q: "Bagaimana cara mencari anggota Simangunsong di website ini?",
-    a: "Anda bisa memakai fitur pencarian nama, lalu membuka profil anggota. Dari profil, Anda dapat melanjutkan penelusuran ke orang tua, pasangan, maupun anak-anaknya.",
-  },
-  {
-    q: "Apakah data silsilah ini publik?",
-    a: "Ya. Informasi pohon silsilah dan profil anggota dapat dilihat publik. Namun penambahan atau pengubahan data dilakukan melalui akses admin agar informasi lebih akurat.",
-  },
-  {
-    q: "Bagaimana cara mengusulkan perbaikan data?",
-    a: "Silakan hubungi pengelola melalui WhatsApp pada bagian donasi/konfirmasi. Sertakan detail nama, hubungan keluarga, dan koreksi data agar proses validasi lebih cepat.",
-  },
-];
-
-
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 function useReveal() {
@@ -281,6 +256,7 @@ export default function HomePage() {
   const [loadingStats, setLoadingStats] = useState(true);
   const [statsActive, setStatsActive] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [showPhotoPopup, setShowPhotoPopup] = useState(true);
   const statsRef = useRef<HTMLDivElement>(null);
 
   // Scroll listener untuk navbar
@@ -334,6 +310,15 @@ export default function HomePage() {
     return () => obs.disconnect();
   }, []);
 
+  useEffect(() => {
+    if (!showPhotoPopup) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setShowPhotoPopup(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [showPhotoPopup]);
+
   const statsData = stats
     ? [
         { value: stats.totalPerson,   label: "Anggota Tercatat",  desc: "Dalam database silsilah" },
@@ -366,6 +351,10 @@ export default function HomePage() {
         @keyframes spin {
           to { transform: rotate(360deg); }
         }
+        @keyframes popupIn {
+          from { opacity:0; transform:translateY(10px) scale(.98); }
+          to   { opacity:1; transform:translateY(0) scale(1); }
+        }
 
         .fu   { opacity:0; animation:fadeUp 1s ease forwards; }
         .d3   { animation-delay:.3s;  } .d5  { animation-delay:.5s;  }
@@ -380,6 +369,7 @@ export default function HomePage() {
         .feat-card:hover .feat-line { opacity:1!important; }
         .person-card > div:hover { border-color:rgba(201,168,76,.35)!important; transform:translateY(-3px); }
         .donate-card:hover { transform:translateY(-4px) !important; }
+        .home-popup-close:hover { color:${C.emas}!important; border-color:rgba(201,168,76,.55)!important; background:rgba(201,168,76,.08)!important; }
         @media (max-width:768px) { .donate-grid { grid-template-columns:1fr!important; } }
         .footer-a:hover  { opacity:1!important; color:${C.emas}!important; }
 
@@ -486,6 +476,70 @@ export default function HomePage() {
         )}
       </nav>
 
+      {/* ── Popup Foto ── */}
+      {showPhotoPopup && (
+        <div style={{
+          position:"fixed",
+          inset:0,
+          zIndex:80,
+          background:"rgba(13,11,8,.82)",
+          backdropFilter:"blur(3px)",
+          display:"flex",
+          alignItems:"center",
+          justifyContent:"center",
+          padding:"22px",
+        }}>
+          <div style={{
+            width:"auto",
+            maxWidth:"94vw",
+            border:`1px solid rgba(201,168,76,.28)`,
+            background:"rgba(13,11,8,.98)",
+            boxShadow:"0 20px 70px rgba(0,0,0,.75)",
+            animation:"popupIn .25s ease",
+            overflow:"hidden",
+            position:"relative",
+          }}>
+            <button
+              onClick={() => setShowPhotoPopup(false)}
+              aria-label="Tutup popup"
+              className="home-popup-close"
+              style={{
+                position:"absolute",
+                top:10,
+                right:10,
+                width:34,
+                height:34,
+                border:`1px solid rgba(201,168,76,.3)`,
+                background:"rgba(13,11,8,.7)",
+                color:C.kremT,
+                cursor:"pointer",
+                fontFamily:"'Cinzel',serif",
+                fontSize:"1rem",
+                lineHeight:1,
+                transition:"all .2s",
+                zIndex:2,
+              }}
+            >
+              ×
+            </button>
+
+            <img
+              src="/disclaimer.png"
+              alt="Disclaimer"
+              style={{
+                display:"block",
+                width:"auto",
+                maxWidth:"94vw",
+                height:"auto",
+                maxHeight:"86vh",
+                objectFit:"contain",
+                background:"rgba(13,11,8,.98)",
+              }}
+            />
+          </div>
+        </div>
+      )}
+
       {/* ── Hero ── */}
       <section className="hero-section" style={{position:"relative",minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:"120px 72px 100px",zIndex:2,overflow:"hidden"}}>
         <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:800,height:800,pointerEvents:"none",background:"radial-gradient(ellipse at center,rgba(139,26,26,.15) 0%,rgba(201,168,76,.04) 50%,transparent 72%)"}}/>
@@ -538,6 +592,7 @@ export default function HomePage() {
             </p>
             <div className="fu d15 hero-btns" style={{display:"flex",gap:16,flexWrap:"wrap"}}>
               <Link href="/tarombo" className="btn-p" style={btnPrimary}>Jelajahi Pohon Silsilah</Link>
+              <Link href="/tentang" className="btn-s" style={btnSecondary}>Tentang Website</Link>
               <Link href="/cari"    className="btn-s" style={btnSecondary}>Cari Anggota</Link>
             </div>
           </div>
@@ -601,6 +656,7 @@ export default function HomePage() {
             </ol>
             <div style={{display:"flex",gap:12,flexWrap:"wrap",marginTop:20}}>
               <Link href="/tarombo" className="btn-p" style={btnPrimary}>Buka Tarombo</Link>
+              <Link href="/tentang" className="btn-s" style={btnSecondary}>Tentang Website</Link>
               <Link href="/person" className="btn-s" style={btnSecondary}>Lihat Daftar Anggota</Link>
               <Link href="/cari" className="btn-s" style={btnSecondary}>Cari Nama Anggota</Link>
             </div>
@@ -787,30 +843,6 @@ export default function HomePage() {
           </RevealDiv>
         </section>
       )}
-
-      {/* ── FAQ ── */}
-      <section id="faq" style={{position:"relative",zIndex:10,padding:"100px 56px",background:C.hitam,borderTop:`1px solid rgba(201,168,76,.1)`}}>
-        <RevealDiv>
-          <SectionHeader
-            tag="Pertanyaan Umum"
-            title="FAQ"
-            gold="Silsilah Simangunsong"
-            sub="Jawaban singkat untuk pertanyaan yang paling sering dicari di Google"
-          />
-          <div style={{maxWidth:920,margin:"0 auto",display:"grid",gap:10}}>
-            {faqItems.map((item) => (
-              <details key={item.q} style={{border:`1px solid rgba(201,168,76,.18)`,background:"rgba(26,22,18,.65)",padding:"14px 16px"}}>
-                <summary style={{fontFamily:"'Cinzel',serif",fontSize:"0.72rem",letterSpacing:"0.12em",textTransform:"uppercase",color:C.emas,cursor:"pointer"}}>
-                  {item.q}
-                </summary>
-                <p style={{marginTop:12,fontFamily:"'Cormorant Garamond',serif",fontSize:"1rem",lineHeight:1.72,color:C.kremT,opacity:.9}}>
-                  {item.a}
-                </p>
-              </details>
-            ))}
-          </div>
-        </RevealDiv>
-      </section>
 
             {/* ── CTA ──
       <section id="tentang" style={{position:"relative",zIndex:10,padding:"120px 40px",textAlign:"center",background:C.hitamL,overflow:"hidden"}}>

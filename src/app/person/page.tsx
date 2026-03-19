@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -309,6 +309,7 @@ export default function PersonListPage() {
   const [scrolled, setScrolled] = useState(false);
   const [isAdmin,  setIsAdmin]  = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const firstFetch = useRef(true);
 
   useEffect(()=>{
     const check = ()=> setIsMobile(window.innerWidth < 640);
@@ -330,7 +331,7 @@ export default function PersonListPage() {
       .catch(()=>{});
   },[]);
 
-  const fetchData = (q="",g="") => {
+  const fetchData = useCallback((q="",g="") => {
     setLoading(true);
     const params = new URLSearchParams();
     if (q) params.set("cari",q);
@@ -340,13 +341,14 @@ export default function PersonListPage() {
       .then(res=>{ if(res.success) setPersons(res.data); else setError("Gagal memuat data"); })
       .catch(()=>setError("Koneksi server gagal"))
       .finally(()=>setLoading(false));
-  };
+  }, []);
 
-  useEffect(()=>{ fetchData(); },[]);
   useEffect(()=>{
-    const t = setTimeout(()=>fetchData(search,gender),350);
+    const delay = firstFetch.current ? 0 : 350;
+    firstFetch.current = false;
+    const t = setTimeout(()=>fetchData(search,gender), delay);
     return ()=>clearTimeout(t);
-  },[search,gender]);
+  },[search,gender,fetchData]);
 
   async function handleDelete(id: number) {
     if (!confirm("Yakin ingin menghapus anggota ini?\nSemua data relasi juga akan dihapus.")) return;

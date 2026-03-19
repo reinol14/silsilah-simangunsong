@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 // Script untuk membuat admin pertama
 // Jalankan dengan: node scripts/create-admin.js
 

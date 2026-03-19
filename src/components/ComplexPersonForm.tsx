@@ -567,7 +567,7 @@ export default function ComplexPersonForm({ onSuccess, onCancel }: ComplexPerson
                         </select>
                         {getPotentialSpouses().length === 0 && (
                           <p style={{ color: "#DC2626", fontSize: "0.85rem", marginTop: 8 }}>
-                            ⚠️ Belum ada calon pasangan yang sesuai. Silakan pilih "Tambah Baru" untuk membuat data pasangan baru.
+                            ⚠️ Belum ada calon pasangan yang sesuai. Silakan pilih &quot;Tambah Baru&quot; untuk membuat data pasangan baru.
                           </p>
                         )}
                       </div>

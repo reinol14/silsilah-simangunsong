@@ -181,7 +181,7 @@ Buatlah dalam 2-3 paragraf yang menggambarkan kehidupan beliau dengan hormat dan
     // Update bio di database
     const updatedPerson = await prisma.person.update({
       where: { id: personId },
-      data: { bio: generatedBio } as any,
+      data: { bio: generatedBio },
     });
 
     return NextResponse.json({

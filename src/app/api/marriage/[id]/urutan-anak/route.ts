@@ -23,7 +23,7 @@ export async function GET(
         wife:    { select: { id: true, nama: true } },
         children: {
           include: { person: { select: { id: true, nama: true, jenisKelamin: true, tanggalLahir: true } } },
-          orderBy: [{ urutanAnak: "asc" } as any, { id: "asc" }],
+          orderBy: [{ urutanAnak: "asc" }, { id: "asc" }],
         },
       },
     });
@@ -66,7 +66,7 @@ export async function PUT(
     // Update setiap child
     await prisma.$transaction(
       updates.map(({ childId, urutanAnak }) =>
-        (prisma.child as any).update({
+        prisma.child.update({
           where: { id: childId },
           data: { urutanAnak },
         })

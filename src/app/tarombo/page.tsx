@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback, useMemo, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -22,13 +21,9 @@ interface FamilyUnit {
   id: string; marriage?: Marriage; person?: Person;
   x: number; y: number; w: number; h: number;
   children: FamilyUnit[]; childPersonIds: number[];
-  lineagePersonId?: number;
   urutanAnak?: number | null;
   truncated?: boolean;
   generasi?: number;
-  marriages?: Marriage[]; // untuk poligami: array of marriages
-  childrenGrouped?: FamilyUnit[][]; // untuk poligami: children per istri
-  wifeIndex?: number; // untuk menandai anak dari istri ke berapa (0-based)
 }
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
@@ -43,31 +38,74 @@ const C = {
 const COUPLE_W = 320; const SINGLE_W = 188;
 const CARD_H = 108;   const H_GAP = 52; const V_GAP = 144;
 
-function getLineagePriority(marriage: Marriage, descendantIds: Set<number>) {
-  const husbandIsDescendant = descendantIds.has(marriage.husbandId);
-  const wifeIsDescendant = descendantIds.has(marriage.wifeId);
+function buildGenerationMap(data: TaromboData): Map<number, number> {
+  const generationMap = new Map<number, number>();
+  const childPersonIds = new Set(data.marriages.flatMap(m => m.children.map(c => c.personId)));
+  const roots = data.allPersons.filter(p => !childPersonIds.has(p.id));
 
-  if (wifeIsDescendant && !husbandIsDescendant) {
-    return {
-      primary: marriage.wife,
-      secondary: marriage.husband,
-      primaryId: marriage.wifeId,
-      secondaryId: marriage.husbandId,
-      singleLineageSide: true,
-    };
+  // Start from global roots so generation number does not depend on current view/filter.
+  const queue: number[] = [];
+  for (const root of roots) {
+    generationMap.set(root.id, 1);
+    queue.push(root.id);
   }
 
-  return {
-    primary: marriage.husband,
-    secondary: marriage.wife,
-    primaryId: marriage.husbandId,
-    secondaryId: marriage.wifeId,
-    singleLineageSide: husbandIsDescendant !== wifeIsDescendant,
-  };
+  while (queue.length > 0) {
+    const currentId = queue.shift()!;
+    const currentGen = generationMap.get(currentId)!;
+    const marriages = data.marriages.filter(m => m.husbandId === currentId);
+    for (const marriage of marriages) {
+      for (const child of marriage.children) {
+        const nextGen = currentGen + 1;
+        const existing = generationMap.get(child.personId);
+        if (existing === undefined || nextGen < existing) {
+          generationMap.set(child.personId, nextGen);
+          queue.push(child.personId);
+        }
+      }
+    }
+  }
+
+  // Keep spouse on the same generation as partner whenever possible.
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const marriage of data.marriages) {
+      const husbandGen = generationMap.get(marriage.husbandId);
+      const wifeGen = generationMap.get(marriage.wifeId);
+      if (husbandGen !== undefined && wifeGen === undefined) {
+        generationMap.set(marriage.wifeId, husbandGen);
+        changed = true;
+      } else if (wifeGen !== undefined && husbandGen === undefined) {
+        generationMap.set(marriage.husbandId, wifeGen);
+        changed = true;
+      }
+    }
+  }
+
+  for (const person of data.allPersons) {
+    if (!generationMap.has(person.id)) generationMap.set(person.id, 1);
+  }
+
+  return generationMap;
+}
+
+function getUnitGenerasi(unit: FamilyUnit, generationMap: Map<number, number>, fallbackDepthGenerasi: number): number {
+  if (unit.marriage) {
+    return (
+      generationMap.get(unit.marriage.husbandId) ??
+      generationMap.get(unit.marriage.wifeId) ??
+      fallbackDepthGenerasi
+    );
+  }
+  if (unit.person) {
+    return generationMap.get(unit.person.id) ?? fallbackDepthGenerasi;
+  }
+  return fallbackDepthGenerasi;
 }
 
 // ─── Build layout ─────────────────────────────────────────────────────────────
-function buildLayout(data: TaromboData, maxDepth: number | null = null) {
+function buildLayout(data: TaromboData, generationMap: Map<number, number>, maxDepth: number | null = null) {
   const marriagesByHusband = new Map<number, Marriage[]>();
   const marriageByWife    = new Map<number, Marriage>();
   for (const m of data.marriages) {
@@ -91,41 +129,36 @@ function buildLayout(data: TaromboData, maxDepth: number | null = null) {
     
     const marriages = marriagesByHusband.get(person.id);
     if (marriages && marriages.length > 0) {
-      // KASUS POLIGAMI: Jika punya lebih dari 1 pernikahan
+      // Jika punya lebih dari 1 pernikahan: buat single card untuk suami, istri-istri jadi children
       if (marriages.length > 1) {
-        // Buat 1 unit besar dengan multiple marriages
-        // Width disesuaikan dengan jumlah istri (setiap istri punya space COUPLE_W/2)
-        const polygamyWidth = COUPLE_W * marriages.length;
-        
-        // Kumpulkan semua children dengan info marriage-nya
-        const allChildrenGrouped: FamilyUnit[][] = [];
-        for (let i = 0; i < marriages.length; i++) {
-          const marriage = marriages[i];
-          const childUnits = marriage.children.map(c => {
-            const childUnit = buildUnit(c.person, c.urutanAnak, depth + 1);
-            childUnit.wifeIndex = i; // Tandai dari istri ke berapa (0-based)
-            return childUnit;
+        const wifeUnits: FamilyUnit[] = [];
+        for (const marriage of marriages) {
+          const wife = marriage.wife;
+          const grandchildren = marriage.children.map(c => buildUnit(c.person, c.urutanAnak, depth + 2));
+          // Buat single card untuk istri dengan anak-anaknya
+          wifeUnits.push({
+            id: `p-${wife.id}-wife`,
+            person: wife,
+            x: 0, y: 0, w: SINGLE_W, h: CARD_H,
+            children: grandchildren,
+            childPersonIds: marriage.children.map(c => c.personId),
+            urutanAnak: undefined
           });
-          allChildrenGrouped.push(childUnits);
         }
-        
+        // Return single card suami dengan istri-istri sebagai children
         return {
-          id: `p-${person.id}-polygamy`,
+          id: `p-${person.id}-poly`,
           person,
-          marriages, // array of marriages
-          childrenGrouped: allChildrenGrouped, // children per istri
-          x: 0, y: 0, w: polygamyWidth, h: CARD_H,
-          children: allChildrenGrouped.flat(), // semua children dalam 1 array
-          childPersonIds: marriages.flatMap(m => m.children.map(c => c.personId)),
-          lineagePersonId: person.id,
-          urutanAnak,
+          x: 0, y: 0, w: SINGLE_W, h: CARD_H,
+          children: wifeUnits,
+          childPersonIds: wifeUnits.map(u => u.person!.id),
+          urutanAnak
         };
       }
-      
-      // KASUS NORMAL: Jika hanya 1 pernikahan
+      // Jika hanya 1 pernikahan: tampilan normal (couple card)
       const marriage = marriages[0];
       const childUnits = marriage.children.map(c => buildUnit(c.person, c.urutanAnak, depth + 1));
-      return { id:`m-${marriage.id}`, marriage, x:0, y:0, w:COUPLE_W, h:CARD_H, children:childUnits, childPersonIds:marriage.children.map(c=>c.personId), lineagePersonId: person.id, urutanAnak };
+      return { id:`m-${marriage.id}`, marriage, x:0, y:0, w:COUPLE_W, h:CARD_H, children:childUnits, childPersonIds:marriage.children.map(c=>c.personId), urutanAnak };
     }
     
     // Jika perempuan: periksa apakah dia istri dalam suatu pernikahan
@@ -133,17 +166,15 @@ function buildLayout(data: TaromboData, maxDepth: number | null = null) {
     const marriageAsWife = marriageByWife.get(person.id);
     if (marriageAsWife && !childPersonIds.has(marriageAsWife.husbandId)) {
       const childUnits = marriageAsWife.children.map(c => buildUnit(c.person, c.urutanAnak, depth + 1));
-      return { id:`m-${marriageAsWife.id}`, marriage:marriageAsWife, x:0, y:0, w:COUPLE_W, h:CARD_H, children:childUnits, childPersonIds:marriageAsWife.children.map(c=>c.personId), lineagePersonId: person.id, urutanAnak };
+      return { id:`m-${marriageAsWife.id}`, marriage:marriageAsWife, x:0, y:0, w:COUPLE_W, h:CARD_H, children:childUnits, childPersonIds:marriageAsWife.children.map(c=>c.personId), urutanAnak };
     }
-    return { id:`p-${person.id}`, person, x:0, y:0, w:SINGLE_W, h:CARD_H, children:[], childPersonIds:[], lineagePersonId: person.id, urutanAnak };
+    return { id:`p-${person.id}`, person, x:0, y:0, w:SINGLE_W, h:CARD_H, children:[], childPersonIds:[], urutanAnak };
   }
 
   const rootUnits: FamilyUnit[] = roots.reduce((acc: FamilyUnit[], p) => {
     if (data.marriages.some(m => m.wifeId === p.id)) return acc; // lewati istri
     // Lewati suami root yang istrinya sudah tampil sebagai anak di pohon
     const marriages = marriagesByHusband.get(p.id);
-    
-    // Lewati suami root yang istrinya sudah tampil sebagai anak di pohon
     if (marriages && marriages.some(m => childPersonIds.has(m.wifeId))) return acc;
     acc.push(buildUnit(p));
     return acc;
@@ -152,7 +183,22 @@ function buildLayout(data: TaromboData, maxDepth: number | null = null) {
   function assignX(unit: FamilyUnit, cursor: number): number {
     if (unit.children.length === 0) { unit.x = cursor; return cursor + unit.w + H_GAP; }
     
-    // Kasus normal: center parent di atas children (termasuk polygamy card)
+    // Kasus khusus: Poligami (suami dengan multiple istri)
+    if (unit.id.includes('-poly')) {
+      // Suami di posisi cursor
+      unit.x = cursor;
+      let wifeCursor = cursor + unit.w + H_GAP; // Mulai dari kanan suami
+      
+      // Tempatkan setiap istri dan anak-anaknya secara horizontal
+      for (const wife of unit.children) {
+        wifeCursor = assignX(wife, wifeCursor);
+        wifeCursor += H_GAP; // Jarak antar istri dan subtree-nya
+      }
+      
+      return wifeCursor;
+    }
+    
+    // Kasus normal: center parent dengan children-nya
     let c = cursor;
     for (const child of unit.children) c = assignX(child, c);
     const first = unit.children[0], last = unit.children[unit.children.length-1];
@@ -164,8 +210,22 @@ function buildLayout(data: TaromboData, maxDepth: number | null = null) {
 
   function assignY(unit: FamilyUnit, depth: number) {
     unit.y = 80 + depth * (CARD_H + V_GAP);
-    unit.generasi = depth + 1; // Set generasi (dimulai dari 1)
-    for (const child of unit.children) assignY(child, depth + 1);
+    unit.generasi = getUnitGenerasi(unit, generationMap, depth + 1);
+    
+    // Special case untuk poligami: istri-istri di level yang sama dengan suami
+    if (unit.id.includes('-poly')) {
+      for (const wife of unit.children) {
+        wife.y = unit.y; // Istri di baris yang sama dengan suami
+        wife.generasi = unit.generasi; // Generasi yang sama
+        // Anak-anak dari istri turun 1 level
+        for (const grandchild of wife.children) {
+          assignY(grandchild, depth + 1);
+        }
+      }
+    } else {
+      // Normal case: children turun 1 level
+      for (const child of unit.children) assignY(child, depth + 1);
+    }
   }
   for (const unit of rootUnits) assignY(unit, 0);
 
@@ -177,10 +237,36 @@ function buildLayout(data: TaromboData, maxDepth: number | null = null) {
   const edges: Edge[] = [];
   for (const unit of allUnits) {
     if (unit.children.length === 0) continue;
-    
     const pCX = unit.x + unit.w / 2, pBY = unit.y + unit.h;
     
-    // Kasus normal: couple card atau single card dengan children (termasuk polygamy)
+    // Kasus khusus: Poligami (suami dengan multiple istri)
+    if (unit.id.includes('-poly')) {
+      // Gambar garis horizontal dari suami ke istri-istri (mereka di level Y yang sama)
+      const midY = unit.y + unit.h / 2; // Tengah vertikal suami
+      
+      for (const wife of unit.children) {
+        const wifeCX = wife.x + wife.w / 2;
+        // Garis horizontal dari suami ke istri
+        edges.push({ x1: pCX, y1: midY, x2: wifeCX, y2: midY });
+      }
+      continue; // Skip logika normal
+    }
+    
+    // Kasus khusus: Istri dalam poligami dengan anak-anak
+    if (unit.id.includes('-wife') && unit.children.length > 0) {
+      // Gambar garis normal dari istri ke anak-anaknya
+      if (unit.children.length === 1) {
+        edges.push({ x1:pCX, y1:pBY, x2:unit.children[0].x+unit.children[0].w/2, y2:unit.children[0].y });
+      } else {
+        const midY = pBY + V_GAP / 2;
+        edges.push({ x1:pCX, y1:pBY, x2:pCX, y2:midY });
+        edges.push({ x1:unit.children[0].x+unit.children[0].w/2, y1:midY, x2:unit.children[unit.children.length-1].x+unit.children[unit.children.length-1].w/2, y2:midY });
+        for (const child of unit.children) edges.push({ x1:child.x+child.w/2, y1:midY, x2:child.x+child.w/2, y2:child.y });
+      }
+      continue;
+    }
+    
+    // Kasus normal: couple card atau single card dengan children
     if (unit.children.length === 1) {
       edges.push({ x1:pCX, y1:pBY, x2:unit.children[0].x+unit.children[0].w/2, y2:unit.children[0].y });
     } else {
@@ -200,7 +286,12 @@ function buildLayout(data: TaromboData, maxDepth: number | null = null) {
 
 // ─── Build Focus Layout ───────────────────────────────────────────────────────
 // Tampilkan hanya: target + saudara, lalu leluhur langsung ke atas (tanpa saudara leluhur)
-function buildFocusLayout(data: TaromboData, targetPersonId: number, maxAncestorDepth: number | null = null) {
+function buildFocusLayout(
+  data: TaromboData,
+  generationMap: Map<number, number>,
+  targetPersonId: number,
+  ancestorDepthLimit: number | null = null
+) {
   const marriagesByHusband = new Map<number, Marriage[]>();
   const marriageByWife    = new Map<number, Marriage>();
   for (const m of data.marriages) {
@@ -215,121 +306,62 @@ function buildFocusLayout(data: TaromboData, targetPersonId: number, maxAncestor
   function buildSubUnit(person: Person, urutanAnak?: number | null): FamilyUnit {
     const marriages = marriagesByHusband.get(person.id);
     if (marriages && marriages.length > 0) {
-      // KASUS POLIGAMI: Jika punya lebih dari 1 pernikahan
+      // Support polygamy in focus mode
       if (marriages.length > 1) {
-        // Buat 1 unit besar dengan multiple marriages
-        const polygamyWidth = COUPLE_W * marriages.length;
-        
-        // Kumpulkan semua children dengan info marriage-nya
-        const allChildrenGrouped: FamilyUnit[][] = [];
-        for (let i = 0; i < marriages.length; i++) {
-          const marriage = marriages[i];
-          const childUnits = marriage.children.map(c => {
-            const childUnit = buildSubUnit(c.person, c.urutanAnak);
-            childUnit.wifeIndex = i; // Tandai dari istri ke berapa (0-based)
-            return childUnit;
+        const wifeUnits: FamilyUnit[] = [];
+        for (const marriage of marriages) {
+          const wife = marriage.wife;
+          const grandchildren = marriage.children.map(c => buildSubUnit(c.person, c.urutanAnak));
+          wifeUnits.push({
+            id: `p-${wife.id}-wife`,
+            person: wife,
+            x: 0, y: 0, w: SINGLE_W, h: CARD_H,
+            children: grandchildren,
+            childPersonIds: marriage.children.map(c => c.personId),
+            urutanAnak: undefined
           });
-          allChildrenGrouped.push(childUnits);
         }
-        
         return {
-          id: `p-${person.id}-polygamy`,
+          id: `p-${person.id}-poly`,
           person,
-          marriages,
-          childrenGrouped: allChildrenGrouped,
-          x: 0, y: 0, w: polygamyWidth, h: CARD_H,
-          children: allChildrenGrouped.flat(),
-          childPersonIds: marriages.flatMap(m => m.children.map(c => c.personId)),
-          lineagePersonId: person.id,
-          urutanAnak,
+          x: 0, y: 0, w: SINGLE_W, h: CARD_H,
+          children: wifeUnits,
+          childPersonIds: wifeUnits.map(u => u.person!.id),
+          urutanAnak
         };
       }
-      
-      // KASUS NORMAL: Jika hanya 1 pernikahan
       const marriage = marriages[0];
       const childUnits = marriage.children.map(c => buildSubUnit(c.person, c.urutanAnak));
-      return { id:`m-${marriage.id}`, marriage, x:0, y:0, w:COUPLE_W, h:CARD_H, children:childUnits, childPersonIds:marriage.children.map(c=>c.personId), lineagePersonId: person.id, urutanAnak };
+      return { id:`m-${marriage.id}`, marriage, x:0, y:0, w:COUPLE_W, h:CARD_H, children:childUnits, childPersonIds:marriage.children.map(c=>c.personId), urutanAnak };
     }
     const mw = marriageByWife.get(person.id);
     if (mw && !childPersonIds.has(mw.husbandId)) {
       const childUnits = mw.children.map(c => buildSubUnit(c.person, c.urutanAnak));
-      return { id:`m-${mw.id}`, marriage:mw, x:0, y:0, w:COUPLE_W, h:CARD_H, children:childUnits, childPersonIds:mw.children.map(c=>c.personId), lineagePersonId: person.id, urutanAnak };
+      return { id:`m-${mw.id}`, marriage:mw, x:0, y:0, w:COUPLE_W, h:CARD_H, children:childUnits, childPersonIds:mw.children.map(c=>c.personId), urutanAnak };
     }
-    return { id:`p-${person.id}`, person, x:0, y:0, w:SINGLE_W, h:CARD_H, children:[], childPersonIds:[], lineagePersonId: person.id, urutanAnak };
+    return { id:`p-${person.id}`, person, x:0, y:0, w:SINGLE_W, h:CARD_H, children:[], childPersonIds:[], urutanAnak };
   }
 
   // Kumpulkan rantai leluhur (dari target ke atas)
   const chain: { marriage: Marriage; childPersonId: number }[] = [];
   let curId = targetPersonId;
   const seen = new Set<number>();
-  
-  // PERBAIKAN: Jika target adalah suami/istri (bukan keturunan), mulai dari pasangannya
-  // Ini memastikan ancestry pasangan ditampilkan (pernikahan = satu kesatuan)
-  let targetMarriage: Marriage | null = null;
-  let spouseConnectorId: number | null = null; // ID pasangan yang menghubungkan ke ancestry
-  if (!childPersonIds.has(targetPersonId)) {
-    // Cek apakah target adalah suami
-    const targetAsHusbandMarriage = marriagesByHusband.get(targetPersonId)?.[0];
-    if (targetAsHusbandMarriage) {
-      const wifeId = targetAsHusbandMarriage.wifeId;
-      if (childPersonIds.has(wifeId)) {
-        // Istri adalah keturunan, mulai dari istri
-        targetMarriage = targetAsHusbandMarriage;
-        spouseConnectorId = wifeId;
-        curId = wifeId;
-      }
-    } else {
-      // Cek apakah target adalah istri
-      const targetAsWifeMarriage = marriageByWife.get(targetPersonId);
-      if (targetAsWifeMarriage) {
-        const husbandId = targetAsWifeMarriage.husbandId;
-        if (childPersonIds.has(husbandId)) {
-          // Suami adalah keturunan, mulai dari suami
-          targetMarriage = targetAsWifeMarriage;
-          spouseConnectorId = husbandId;
-          curId = husbandId;
-        }
-      }
-    }
-  }
-  
   while (!seen.has(curId)) {
-    if (maxAncestorDepth !== null && chain.length >= maxAncestorDepth) break;
     seen.add(curId);
     const pm = data.marriages.find(m => m.children.some(c => c.personId === curId));
     if (!pm) break;
     chain.push({ marriage: pm, childPersonId: curId });
-    
-    // Naik ke orang tua: prioritas ayah (husbandId)
-    let nextId = pm.husbandId;
-    
-    // PERBAIKAN: Jika ayah tidak punya ancestry lebih tinggi, coba naik melalui ibu
-    // Ini menangani kasus: anak dari (suami external + istri keturunan Simangunsong)
-    const fatherNextMarriage = data.marriages.find(m => m.children.some(c => c.personId === nextId));
-    if (!fatherNextMarriage) {
-      // Ayah tidak punya parent, cek apakah ibu adalah keturunan dengan ancestry
-      const motherId = pm.wifeId;
-      if (childPersonIds.has(motherId)) {
-        const motherNextMarriage = data.marriages.find(m => m.children.some(c => c.personId === motherId));
-        if (motherNextMarriage) {
-          // Naik melalui ibu
-          nextId = motherId;
-        }
-      }
-    }
-    
-    curId = nextId;
+    curId = pm.husbandId;
   }
-  
-  // Jika target adalah suami/istri external, tambahkan pernikahan mereka sebagai level paling bawah
-  if (targetMarriage && spouseConnectorId) {
-    chain.unshift({ marriage: targetMarriage, childPersonId: spouseConnectorId });
-  }
+
+  const visibleChain = ancestorDepthLimit === null
+    ? chain
+    : chain.slice(0, Math.max(0, ancestorDepthLimit));
 
   // Bangun unit dari bawah ke atas
   let root: FamilyUnit | null = null;
-  for (let i = 0; i < chain.length; i++) {
-    const { marriage, childPersonId } = chain[i];
+  for (let i = 0; i < visibleChain.length; i++) {
+    const { marriage } = visibleChain[i];
     if (i === 0) {
       // Level target: tampilkan semua saudara beserta subtree-nya
       root = {
@@ -344,7 +376,7 @@ function buildFocusLayout(data: TaromboData, targetPersonId: number, maxAncestor
         id:`m-${marriage.id}`, marriage,
         x:0, y:0, w:COUPLE_W, h:CARD_H,
         children: root ? [root] : [],
-        childPersonIds: [childPersonId], // Child dari marriage ini yang menghubungkan ke level di bawah
+        childPersonIds: [visibleChain[i-1].marriage.husbandId],
       };
     }
   }
@@ -360,22 +392,48 @@ function buildFocusLayout(data: TaromboData, targetPersonId: number, maxAncestor
   function assignX(unit: FamilyUnit, cursor: number): number {
     if (unit.children.length === 0) { unit.x = cursor; return cursor + unit.w + H_GAP; }
     
-    // Kasus normal: center parent terhadap children (termasuk polygamy card)
+    // Kasus khusus: Poligami (suami dengan multiple istri)
+    if (unit.id.includes('-poly')) {
+      // Suami di posisi cursor
+      unit.x = cursor;
+      let wifeCursor = cursor + unit.w + H_GAP; // Mulai dari kanan suami
+      
+      // Tempatkan setiap istri dan anak-anaknya secara horizontal
+      for (const wife of unit.children) {
+        wifeCursor = assignX(wife, wifeCursor);
+        wifeCursor += H_GAP; // Jarak antar istri dan subtree-nya
+      }
+      
+      return wifeCursor;
+    }
+    
+    // Kasus normal: center parent dengan children-nya
     let c = cursor;
     for (const child of unit.children) c = assignX(child, c);
     const first = unit.children[0], last = unit.children[unit.children.length-1];
     unit.x = first.x + ((last.x + last.w) - first.x) / 2 - unit.w / 2;
     return Math.max(c, unit.x + unit.w + H_GAP);
   }
-  
   assignX(root, 60);
 
   function assignY(unit: FamilyUnit, depth: number) {
     unit.y = 80 + depth * (CARD_H + V_GAP);
-    unit.generasi = depth + 1; // Set generasi (dimulai dari 1)
+    unit.generasi = getUnitGenerasi(unit, generationMap, depth + 1);
     
-    // Kasus normal: children turun 1 level
-    for (const child of unit.children) assignY(child, depth + 1);
+    // Special case untuk poligami: istri-istri di level yang sama dengan suami
+    if (unit.id.includes('-poly')) {
+      for (const wife of unit.children) {
+        wife.y = unit.y; // Istri di baris yang sama dengan suami
+        wife.generasi = unit.generasi; // Generasi yang sama
+        // Anak-anak dari istri turun 1 level
+        for (const grandchild of wife.children) {
+          assignY(grandchild, depth + 1);
+        }
+      }
+    } else {
+      // Normal case: children turun 1 level
+      for (const child of unit.children) assignY(child, depth + 1);
+    }
   }
   assignY(root, 0);
 
@@ -387,10 +445,36 @@ function buildFocusLayout(data: TaromboData, targetPersonId: number, maxAncestor
   const edges: Edge[] = [];
   for (const unit of allUnits) {
     if (unit.children.length === 0) continue;
-    
     const pCX = unit.x + unit.w / 2, pBY = unit.y + unit.h;
     
-    // Kasus normal: couple card atau single card dengan children (termasuk polygamy)
+    // Kasus khusus: Poligami (suami dengan multiple istri)
+    if (unit.id.includes('-poly')) {
+      // Gambar garis horizontal dari suami ke istri-istri (mereka di level Y yang sama)
+      const midY = unit.y + unit.h / 2; // Tengah vertikal suami
+      
+      for (const wife of unit.children) {
+        const wifeCX = wife.x + wife.w / 2;
+        // Garis horizontal dari suami ke istri
+        edges.push({ x1: pCX, y1: midY, x2: wifeCX, y2: midY });
+      }
+      continue; // Skip logika normal
+    }
+    
+    // Kasus khusus: Istri dalam poligami dengan anak-anak
+    if (unit.id.includes('-wife') && unit.children.length > 0) {
+      // Gambar garis normal dari istri ke anak-anaknya
+      if (unit.children.length === 1) {
+        edges.push({ x1:pCX, y1:pBY, x2:unit.children[0].x+unit.children[0].w/2, y2:unit.children[0].y });
+      } else {
+        const midY = pBY + V_GAP / 2;
+        edges.push({ x1:pCX, y1:pBY, x2:pCX, y2:midY });
+        edges.push({ x1:unit.children[0].x+unit.children[0].w/2, y1:midY, x2:unit.children[unit.children.length-1].x+unit.children[unit.children.length-1].w/2, y2:midY });
+        for (const child of unit.children) edges.push({ x1:child.x+child.w/2, y1:midY, x2:child.x+child.w/2, y2:child.y });
+      }
+      continue;
+    }
+    
+    // Kasus normal: couple card atau single card dengan children
     if (unit.children.length === 1) {
       edges.push({ x1:pCX, y1:pBY, x2:unit.children[0].x+unit.children[0].w/2, y2:unit.children[0].y });
     } else {
@@ -407,108 +491,12 @@ function buildFocusLayout(data: TaromboData, targetPersonId: number, maxAncestor
 }
 
 // ─── SVG Cards ────────────────────────────────────────────────────────────────
-function PolygamyCard({ unit, selected, onSelect }: { unit: FamilyUnit; selected: boolean; onSelect: (u: FamilyUnit) => void }) {
-  const { x, y, w, h, person, marriages } = unit;
-  if (!person || !marriages || marriages.length === 0) return null;
-  
-  const husband = person;
-  const initH = husband.nama.split(" ").slice(0,2).map(w=>w[0]).join("");
-  const short = (n:string, max=17) => n.length > max ? n.slice(0,max-1)+"…" : n;
-  const halfH = h / 2; // Bagian atas untuk suami, bawah untuk istri
-  
-  return (
-    <g transform={`translate(${x},${y})`} onClick={()=>onSelect(unit)} style={{cursor:"pointer"}} className="pnode">
-      {selected && <rect x={-5} y={-5} width={w+10} height={h+10} rx={5} fill="none" stroke={C.emas} strokeWidth="3" opacity="1"/>}
-      
-      {/* Background utama */}
-      <rect x={0} y={0} width={w} height={h} rx={4} fill={selected?"rgba(92,14,14,0.95)":"rgba(28,24,18,0.97)"} stroke={selected?C.emas:"rgba(201,168,76,0.42)"} strokeWidth="1.2"/>
-      <rect x={0} y={0} width={w} height={4} rx={4} fill={C.emas} opacity=".7"/>
-      
-      {/* Garis horizontal pemisah suami/istri */}
-      <line x1={0} y1={halfH} x2={w} y2={halfH} stroke="rgba(201,168,76,0.4)" strokeWidth="1.5"/>
-      
-      {/* BAGIAN SUAMI (atas) */}
-      <rect x={0} y={4} width={4} height={halfH-4} fill={C.biru} opacity=".45"/>
-      <circle cx={w/2} cy={halfH/2} r={18} fill="rgba(10,8,5,.9)" stroke="rgba(126,184,212,.4)" strokeWidth="1.2"/>
-      {husband.foto 
-        ? <image href={husband.foto} x={w/2-18} y={halfH/2-18} width={36} height={36} preserveAspectRatio="xMidYMid slice" clipPath="circle(18px at center)"/>
-        : <text x={w/2} y={halfH/2+5} textAnchor="middle" fill={C.biru} fontSize="13" fontFamily="'Cinzel Decorative',cursive" fontWeight="700">{initH}</text>
-      }
-      <text x={w/2} y={halfH-16} textAnchor="middle" fill={C.kremT} fontSize="10" fontFamily="'Cinzel',serif" fontWeight="600">{short(husband.nama, 25)}</text>
-      <text x={w/2} y={halfH-6} textAnchor="middle" fill={C.biru} fontSize="8" fontFamily="'Cinzel',serif" opacity=".85">SUAMI</text>
-      
-      {/* BAGIAN ISTRI (bawah - dibagi horizontal per istri) */}
-      {marriages.map((marriage, i) => {
-        const wife = marriage.wife;
-        const wifeW = COUPLE_W;
-        const wifeX = i * wifeW;
-        const initW = wife.nama.split(" ").slice(0,2).map(w=>w[0]).join("");
-        const childCount = marriage.children.length;
-        
-        return (
-          <g key={marriage.id}>
-            {/* Garis vertikal pemisah antar istri (kecuali yang terakhir) */}
-            {i < marriages.length - 1 && (
-              <line x1={wifeX + wifeW} y1={halfH} x2={wifeX + wifeW} y2={h} stroke="rgba(201,168,76,0.3)" strokeWidth="1"/>
-            )}
-            
-            {/* Border istri */}
-            <rect x={wifeX + wifeW - 4} y={halfH} width={4} height={halfH} fill={C.pink} opacity=".45"/>
-            
-            {/* Foto/initial istri */}
-            <circle cx={wifeX + wifeW/2} cy={halfH + halfH/2} r={16} fill="rgba(10,8,5,.9)" stroke="rgba(212,160,181,.4)" strokeWidth="1.2"/>
-            {wife.foto
-              ? <image href={wife.foto} x={wifeX + wifeW/2 - 16} y={halfH + halfH/2 - 16} width={32} height={32} preserveAspectRatio="xMidYMid slice" clipPath="circle(16px at center)"/>
-              : <text x={wifeX + wifeW/2} y={halfH + halfH/2 + 5} textAnchor="middle" fill={C.pink} fontSize="11" fontFamily="'Cinzel Decorative',cursive" fontWeight="700">{initW}</text>
-            }
-            
-            {/* Nama istri */}
-            <text x={wifeX + wifeW/2} y={h - 18} textAnchor="middle" fill={C.kremT} fontSize="9" fontFamily="'Cinzel',serif" fontWeight="600">{short(wife.nama, 14)}</text>
-            <text x={wifeX + wifeW/2} y={h - 9} textAnchor="middle" fill={C.pink} fontSize="7.5" fontFamily="'Cinzel',serif" opacity=".85">ISTRI {i + 1}</text>
-            
-            {/* Jumlah anak per istri */}
-            {childCount > 0 && (
-              <>
-                <rect x={wifeX + wifeW/2 - 18} y={halfH + 4} width={36} height={12} rx={6} fill="rgba(92,14,14,0.75)" stroke="rgba(201,168,76,0.45)" strokeWidth=".8"/>
-                <text x={wifeX + wifeW/2} y={halfH + 13} textAnchor="middle" fill={C.emasM} fontSize="7.5" fontFamily="'Cinzel',serif">{childCount} anak</text>
-              </>
-            )}
-          </g>
-        );
-      })}
-      
-      {/* Badge generasi */}
-      {unit.generasi && (
-        <>
-          <rect x={4} y={h-17} width={38} height={14} rx={7} fill="rgba(201,168,76,0.18)" stroke="rgba(201,168,76,0.4)" strokeWidth=".8"/>
-          <text x={23} y={h-7} textAnchor="middle" fill={C.emas} fontSize="7.5" fontFamily="'Cinzel',serif" fontWeight="600">G-{unit.generasi}</text>
-        </>
-      )}
-      
-      {/* Total anak dari semua istri */}
-      <rect x={w - 50} y={4} width={46} height={15} rx={7.5} fill="rgba(139,26,26,0.88)" stroke="rgba(201,168,76,0.55)" strokeWidth=".9"/>
-      <text x={w - 27} y={15} textAnchor="middle" fill={C.emasM} fontSize="8" fontFamily="'Cinzel',serif">{marriages.reduce((sum, m) => sum + m.children.length, 0)} anak</text>
-    </g>
-  );
-}
-
-function CoupleCard({ unit, selected, onSelect, descendantIds }: { unit: FamilyUnit; selected: boolean; onSelect: (u: FamilyUnit) => void; descendantIds: Set<number> }) {
+function CoupleCard({ unit, selected, onSelect }: { unit: FamilyUnit; selected: boolean; onSelect: (u: FamilyUnit) => void }) {
   const { x, y, w, h, marriage } = unit;
   if (!marriage) return null;
-  const fromDescendant = getLineagePriority(marriage, descendantIds);
-  const primary = unit.lineagePersonId === marriage.wifeId
-    ? marriage.wife
-    : unit.lineagePersonId === marriage.husbandId
-      ? marriage.husband
-      : fromDescendant.primary;
-  const secondary = primary.id === marriage.husbandId ? marriage.wife : marriage.husband;
-  const singleLineageSide = fromDescendant.singleLineageSide;
-  const initPrimary = primary.nama.split(" ").slice(0,2).map(w=>w[0]).join("");
-  const initSecondary = secondary.nama.split(" ").slice(0,2).map(w=>w[0]).join("");
-  const primaryAccent = primary.jenisKelamin === "LAKI_LAKI" ? C.biru : C.pink;
-  const secondaryAccent = secondary.jenisKelamin === "LAKI_LAKI" ? C.biru : C.pink;
-  const primaryLabel = "UTAMA";
-  const secondaryLabel = "PASANGAN";
+  const { husband, wife } = marriage;
+  const initH = husband.nama.split(" ").slice(0,2).map(w=>w[0]).join("");
+  const initW = wife.nama.split(" ").slice(0,2).map(w=>w[0]).join("");
   const short = (n:string, max=17) => n.length > max ? n.slice(0,max-1)+"…" : n;
   return (
     <g transform={`translate(${x},${y})`} onClick={()=>onSelect(unit)} style={{cursor:"pointer"}} className="pnode">
@@ -516,19 +504,19 @@ function CoupleCard({ unit, selected, onSelect, descendantIds }: { unit: FamilyU
       <rect x={0} y={0} width={w} height={h} rx={4} fill={selected?"rgba(92,14,14,0.95)":"rgba(28,24,18,0.97)"} stroke={selected?C.emas:"rgba(201,168,76,0.42)"} strokeWidth="1.2"/>
       <rect x={0} y={0} width={w} height={4} rx={4} fill={C.emas} opacity=".7"/>
       <line x1={w/2} y1={10} x2={w/2} y2={h-10} stroke="rgba(201,168,76,0.22)" strokeWidth="1"/>
-      <rect x={0} y={4} width={4} height={h-4} fill={primaryAccent} opacity=".45"/>
+      <rect x={0} y={4} width={4} height={h-4} fill={C.biru} opacity=".45"/>
       <circle cx={30} cy={h/2} r={21} fill="rgba(10,8,5,.9)" stroke="rgba(126,184,212,.4)" strokeWidth="1.2"/>
-      {primary.foto ? <image href={primary.foto} x={9} y={h/2-21} width={42} height={42} preserveAspectRatio="xMidYMid slice"/> : <text x={30} y={h/2+5} textAnchor="middle" fill={primaryAccent} fontSize="13" fontFamily="'Cinzel Decorative',cursive" fontWeight="700">{initPrimary}</text>}
-      <text x={58} y={h/2-8} fill={C.kremT} fontSize="11" fontFamily="'Cinzel',serif" fontWeight="600">{short(primary.nama,16)}</text>
-      <text x={58} y={h/2+6} fill={primaryAccent} fontSize="8.5" fontFamily="'Cinzel',serif" opacity=".9">{primaryLabel}</text>
-      {primary.tanggalLahir && <text x={58} y={h/2+19} fill={C.emasT} fontSize="8" fontFamily="'IM Fell English',serif" fontStyle="italic">b.{new Date(primary.tanggalLahir).getFullYear()}</text>}
+      {husband.foto ? <image href={husband.foto} x={9} y={h/2-21} width={42} height={42} preserveAspectRatio="xMidYMid slice"/> : <text x={30} y={h/2+5} textAnchor="middle" fill={C.biru} fontSize="13" fontFamily="'Cinzel Decorative',cursive" fontWeight="700">{initH}</text>}
+      <text x={58} y={h/2-8} fill={C.kremT} fontSize="11" fontFamily="'Cinzel',serif" fontWeight="600">{short(husband.nama,16)}</text>
+      <text x={58} y={h/2+6} fill={C.biru} fontSize="8.5" fontFamily="'Cinzel',serif" opacity=".85">SUAMI</text>
+      {husband.tanggalLahir && <text x={58} y={h/2+19} fill={C.emasT} fontSize="8" fontFamily="'IM Fell English',serif" fontStyle="italic">b.{new Date(husband.tanggalLahir).getFullYear()}</text>}
       <text x={w/2} y={h/2+6} textAnchor="middle" fill={C.emas} fontSize="13" fontFamily="'Cinzel',serif" opacity=".75">✦</text>
-      <rect x={w-4} y={4} width={4} height={h-4} fill={secondaryAccent} opacity=".45"/>
+      <rect x={w-4} y={4} width={4} height={h-4} fill={C.pink} opacity=".45"/>
       <circle cx={w-30} cy={h/2} r={21} fill="rgba(10,8,5,.9)" stroke="rgba(212,160,181,.4)" strokeWidth="1.2"/>
-      {secondary.foto ? <image href={secondary.foto} x={w-51} y={h/2-21} width={42} height={42} preserveAspectRatio="xMidYMid slice"/> : <text x={w-30} y={h/2+5} textAnchor="middle" fill={secondaryAccent} fontSize="13" fontFamily="'Cinzel Decorative',cursive" fontWeight="700">{initSecondary}</text>}
-      <text x={w/2+14} y={h/2-8} fill={C.kremT} fontSize="11" fontFamily="'Cinzel',serif" fontWeight="600" textAnchor="start">{short(secondary.nama,16)}</text>
-      <text x={w/2+14} y={h/2+6} fill={secondaryAccent} fontSize="8.5" fontFamily="'Cinzel',serif" opacity=".85" textAnchor="start">{secondaryLabel}</text>
-      {secondary.tanggalLahir && <text x={w/2+14} y={h/2+19} fill={C.emasT} fontSize="8" fontFamily="'IM Fell English',serif" fontStyle="italic" textAnchor="start">b.{new Date(secondary.tanggalLahir).getFullYear()}</text>}
+      {wife.foto ? <image href={wife.foto} x={w-51} y={h/2-21} width={42} height={42} preserveAspectRatio="xMidYMid slice"/> : <text x={w-30} y={h/2+5} textAnchor="middle" fill={C.pink} fontSize="13" fontFamily="'Cinzel Decorative',cursive" fontWeight="700">{initW}</text>}
+      <text x={w/2+14} y={h/2-8} fill={C.kremT} fontSize="11" fontFamily="'Cinzel',serif" fontWeight="600" textAnchor="start">{short(wife.nama,16)}</text>
+      <text x={w/2+14} y={h/2+6} fill={C.pink} fontSize="8.5" fontFamily="'Cinzel',serif" opacity=".85" textAnchor="start">ISTRI</text>
+      {wife.tanggalLahir && <text x={w/2+14} y={h/2+19} fill={C.emasT} fontSize="8" fontFamily="'IM Fell English',serif" fontStyle="italic" textAnchor="start">b.{new Date(wife.tanggalLahir).getFullYear()}</text>}
       {unit.children.length > 0 && (<>
         <rect x={w/2-22} y={h-18} width={44} height={15} rx={7.5} fill="rgba(92,14,14,0.75)" stroke="rgba(201,168,76,0.45)" strokeWidth=".9"/>
         <text x={w/2} y={h-7} textAnchor="middle" fill={C.emasM} fontSize="8.5" fontFamily="'Cinzel',serif">{unit.children.length} anak</text>
@@ -537,12 +525,6 @@ function CoupleCard({ unit, selected, onSelect, descendantIds }: { unit: FamilyU
         <>
           <rect x={4} y={h-17} width={38} height={14} rx={7} fill="rgba(201,168,76,0.18)" stroke="rgba(201,168,76,0.4)" strokeWidth=".8"/>
           <text x={23} y={h-7} textAnchor="middle" fill={C.emas} fontSize="7.5" fontFamily="'Cinzel',serif" fontWeight="600">G-{unit.generasi}</text>
-        </>
-      )}
-      {unit.wifeIndex != null && (
-        <>
-          <rect x={w-48} y={3} width={44} height={16} rx={8} fill="rgba(212,160,181,0.25)" stroke={C.pink} strokeWidth=".9"/>
-          <text x={w-26} y={14} textAnchor="middle" fill={C.pink} fontSize="7.5" fontFamily="'Cinzel',serif" fontWeight="600">Istri {unit.wifeIndex + 1}</text>
         </>
       )}
     </g>
@@ -556,6 +538,7 @@ function SingleCard({ unit, selected, onSelect }: { unit: FamilyUnit; selected: 
   const accent = isLaki ? C.biru : C.pink;
   const initials = person.nama.split(" ").slice(0,2).map(n=>n[0]).join("");
   const short = (n:string, max=19) => n.length>max ? n.slice(0,max-1)+"…" : n;
+  const isWifeInPolygamy = unit.id.includes('-wife'); // Istri dalam konteks poligami
   
   return (
     <g transform={`translate(${x},${y})`} onClick={()=>onSelect(unit)} style={{cursor:"pointer"}} className="pnode">
@@ -566,7 +549,7 @@ function SingleCard({ unit, selected, onSelect }: { unit: FamilyUnit; selected: 
       <circle cx={32} cy={h/2} r={23} fill="rgba(10,8,5,.9)" stroke="rgba(201,168,76,.25)" strokeWidth="1.2"/>
       {person.foto ? <image href={person.foto} x={9} y={h/2-23} width={46} height={46} preserveAspectRatio="xMidYMid slice"/> : <text x={32} y={h/2+6} textAnchor="middle" fill={accent} fontSize="15" fontFamily="'Cinzel Decorative',cursive" fontWeight="700">{initials}</text>}
       <text x={63} y={h/2-9} fill={C.kremT} fontSize="11.5" fontFamily="'Cinzel',serif" fontWeight="600">{short(person.nama)}</text>
-      <text x={63} y={h/2+6} fill={accent} fontSize="9" fontFamily="'Cinzel',serif" opacity=".88">{isLaki?"LAKI-LAKI":"PEREMPUAN"}</text>
+      <text x={63} y={h/2+6} fill={accent} fontSize="9" fontFamily="'Cinzel',serif" opacity=".88">{isWifeInPolygamy ? "ISTRI" : (isLaki?"LAKI-LAKI":"PEREMPUAN")}</text>
       {person.tanggalLahir && <text x={63} y={h/2+20} fill={C.emasT} fontSize="8.5" fontFamily="'IM Fell English',serif" fontStyle="italic">b.{new Date(person.tanggalLahir).getFullYear()}{person.tanggalWafat?` – ${new Date(person.tanggalWafat).getFullYear()}`:""}</text>}
       {urutanAnak != null && (
         <>
@@ -586,10 +569,11 @@ function SingleCard({ unit, selected, onSelect }: { unit: FamilyUnit; selected: 
           <text x={23} y={h-7} textAnchor="middle" fill={C.emas} fontSize="7.5" fontFamily="'Cinzel',serif" fontWeight="600">G-{unit.generasi}</text>
         </>
       )}
-      {unit.wifeIndex != null && (
+      {/* Badge untuk poligami (suami dengan multiple istri) */}
+      {unit.id.includes('-poly') && unit.children.length > 1 && (
         <>
-          <rect x={w-48} y={h-17} width={44} height={14} rx={7} fill="rgba(212,160,181,0.25)" stroke={C.pink} strokeWidth=".9"/>
-          <text x={w-26} y={h-7} textAnchor="middle" fill={C.pink} fontSize="7.5" fontFamily="'Cinzel',serif" fontWeight="600">Istri {unit.wifeIndex + 1}</text>
+          <rect x={w/2-28} y={h-18} width={56} height={15} rx={7.5} fill="rgba(139,26,26,0.75)" stroke="rgba(201,168,76,0.45)" strokeWidth=".9"/>
+          <text x={w/2} y={h-7} textAnchor="middle" fill={C.emasM} fontSize="8.5" fontFamily="'Cinzel',serif">{unit.children.length} istri</text>
         </>
       )}
     </g>
@@ -1126,10 +1110,8 @@ function AddSpouseForm({ person, onSuccess, onCancel }: {
 }
 
 // ─── Detail Panel ─────────────────────────────────────────────────────────────
-function DetailPanel({ unit, allMarriages, descendantIds, onClose, isMobile, isAdmin, onDelete, onAddChildSuccess, onFocus }: {
+function DetailPanel({ unit, onClose, isMobile, isAdmin, onDelete, onAddChildSuccess, onFocus }: {
   unit: FamilyUnit;
-  allMarriages: Marriage[];
-  descendantIds: Set<number>;
   onClose: ()=>void;
   isMobile: boolean;
   isAdmin: boolean;
@@ -1141,10 +1123,6 @@ function DetailPanel({ unit, allMarriages, descendantIds, onClose, isMobile, isA
   const [addChildMode,       setAddChildMode]       = useState(false);
   const [addSpouseMode,      setAddSpouseMode]      = useState(false);
   const [insertBetweenTarget, setInsertBetweenTarget] = useState<{personId:number;personNama:string}|null>(null);
-  const lineagePriority = unit.marriage ? getLineagePriority(unit.marriage, descendantIds) : null;
-  const couplePeople = isCouple
-    ? [lineagePriority?.primary ?? unit.marriage!.husband, lineagePriority?.secondary ?? unit.marriage!.wife]
-    : [unit.person!];
   const panelStyle: React.CSSProperties = isMobile ? {
     position:"fixed", bottom:0, left:0, right:0,
     maxHeight:"50vh", overflowY:"auto",
@@ -1216,9 +1194,9 @@ function DetailPanel({ unit, allMarriages, descendantIds, onClose, isMobile, isA
             {unit.generasi && <span style={{marginLeft:8,color:C.emas,fontWeight:600}}>• G-{unit.generasi}</span>}
           </p>
           <h3 style={{fontFamily:"'Cinzel Decorative',cursive",fontSize:"0.82rem",color:C.putih,lineHeight:1.35}}>
-            {isCouple?(lineagePriority?.primary.nama ?? unit.marriage!.husband.nama):unit.person!.nama}
+            {isCouple?unit.marriage!.husband.nama:unit.person!.nama}
           </h3>
-          {isCouple && <p style={{fontFamily:"'Cinzel',serif",fontSize:"0.72rem",color:C.pink,marginTop:3}}>✦ {lineagePriority?.secondary.nama ?? unit.marriage!.wife.nama}</p>}
+          {isCouple && <p style={{fontFamily:"'Cinzel',serif",fontSize:"0.72rem",color:C.pink,marginTop:3}}>✦ {unit.marriage!.wife.nama}</p>}
         </div>
         <button onClick={onClose} style={{background:"none",border:"none",color:C.emasT,cursor:"pointer",fontSize:"1.5rem",lineHeight:1,padding:"0 4px",flexShrink:0}}>×</button>
       </div>
@@ -1226,30 +1204,28 @@ function DetailPanel({ unit, allMarriages, descendantIds, onClose, isMobile, isA
       <div style={{padding:"12px 16px",display:"flex",flexDirection:"column",gap:10}}>
         {/* Avatars */}
         <div style={{display:"flex",justifyContent:"center",gap:isCouple?16:0,marginBottom:2}}>
-          {couplePeople.map((p,i)=>{
+          {[isCouple?unit.marriage!.husband:unit.person!, ...(isCouple?[unit.marriage!.wife]:[])].map((p,i)=>{
             const acc = p.jenisKelamin==="LAKI_LAKI"?C.biru:C.pink;
             return (
               <div key={i} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
                 <div style={{width:54,height:54,borderRadius:"50%",background:`linear-gradient(135deg,${C.merahTua},${C.hitam})`,border:`2px solid ${acc}`,display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden"}}>
                   {p.foto?<img src={p.foto} alt={p.nama} style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span style={{fontFamily:"'Cinzel Decorative',cursive",fontSize:"1.1rem",color:acc}}>{p.nama.charAt(0)}</span>}
                 </div>
-                <span style={{fontFamily:"'Cinzel',serif",fontSize:"0.56rem",color:acc,letterSpacing:"0.1em"}}>
-                  {isCouple ? (i===0 ? "Utama" : "Pasangan") : (p.jenisKelamin==="LAKI_LAKI"?"Laki-laki":"Perempuan")}
-                </span>
+                <span style={{fontFamily:"'Cinzel',serif",fontSize:"0.56rem",color:acc,letterSpacing:"0.1em"}}>{p.jenisKelamin==="LAKI_LAKI"?"Suami":"Istri"}</span>
               </div>
             );
           })}
         </div>
 
         {/* Info */}
-        {couplePeople.map((p,pi)=>(
+        {(isCouple?[unit.marriage!.husband,unit.marriage!.wife]:[unit.person!]).map((p,pi)=>(
           <div key={pi}>
-            {isCouple && <p style={{fontFamily:"'Cinzel',serif",fontSize:"0.6rem",color:pi===0?C.biru:C.pink,letterSpacing:"0.1em",marginBottom:5,borderBottom:`1px solid rgba(201,168,76,.08)`,paddingBottom:3}}>{pi===0?"Utama":"Pasangan"}: {p.nama}</p>}
-            {([
+            {isCouple && <p style={{fontFamily:"'Cinzel',serif",fontSize:"0.6rem",color:pi===0?C.biru:C.pink,letterSpacing:"0.1em",marginBottom:5,borderBottom:`1px solid rgba(201,168,76,.08)`,paddingBottom:3}}>{p.nama}</p>}
+            {[
               p.tanggalLahir&&{l:"Lahir",v:new Date(p.tanggalLahir).toLocaleDateString("id-ID",{day:"numeric",month:"long",year:"numeric"})},
               p.tanggalWafat&&{l:"Wafat",v:new Date(p.tanggalWafat).toLocaleDateString("id-ID",{day:"numeric",month:"long",year:"numeric"})},
               p.tempatLahir&&{l:"Tempat",v:p.tempatLahir},
-            ] as any[]).filter(Boolean).map((row:any,i:number)=>(
+            ].filter((row): row is { l: string; v: string } => Boolean(row)).map((row,i)=>(
               <div key={i} style={{display:"flex",gap:8,alignItems:"baseline",marginBottom:3}}>
                 <span style={{fontFamily:"'Cinzel',serif",fontSize:"0.53rem",letterSpacing:"0.18em",textTransform:"uppercase",color:C.emasT,minWidth:44}}>{row.l}</span>
                 <span style={{fontFamily:"'Cormorant Garamond',serif",fontSize:"0.82rem",color:C.kremT}}>{row.v}</span>
@@ -1258,48 +1234,18 @@ function DetailPanel({ unit, allMarriages, descendantIds, onClose, isMobile, isA
           </div>
         ))}
 
-        {/* Parents */}
-        {(() => {
-          // Cari orang tua dari couple atau person
-          const personId = isCouple ? (lineagePriority?.primaryId ?? unit.marriage!.husbandId) : unit.person!.id;
-          const parentMarriage = allMarriages.find(m => m.children.some(c => c.personId === personId));
-          
-          if (!parentMarriage) return null;
-          
-          return (
-            <div style={{borderTop:`1px solid rgba(201,168,76,.1)`,paddingTop:8,marginTop:2}}>
-              <p style={{fontFamily:"'Cinzel',serif",fontSize:"0.53rem",letterSpacing:"0.2em",textTransform:"uppercase",color:C.emasT,marginBottom:7}}>Orang Tua</p>
-              <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:5}}>
-                <span style={{color:C.biru,fontSize:"0.48rem"}}>♂</span>
-                <span style={{fontFamily:"'Cinzel',serif",fontSize:"0.68rem",color:C.kremT,flex:1}}>{parentMarriage.husband.nama}</span>
-              </div>
-              <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:5}}>
-                <span style={{color:C.pink,fontSize:"0.48rem"}}>♀</span>
-                <span style={{fontFamily:"'Cinzel',serif",fontSize:"0.68rem",color:C.kremT,flex:1}}>{parentMarriage.wife.nama}</span>
-              </div>
-            </div>
-          );
-        })()}
-
         {/* Children */}
         {unit.children.length>0 && (
           <div style={{borderTop:`1px solid rgba(201,168,76,.1)`,paddingTop:8,marginTop:2}}>
             <p style={{fontFamily:"'Cinzel',serif",fontSize:"0.53rem",letterSpacing:"0.2em",textTransform:"uppercase",color:C.emasT,marginBottom:7}}>Anak-anak ({unit.children.length})</p>
             {unit.children.map(child=>{
-              const lineagePerson = child.person
-                ?? (child.marriage
-                  ? (child.lineagePersonId === child.marriage.wifeId ? child.marriage.wife : child.marriage.husband)
-                  : null);
-              const childSpouse = child.marriage
-                ? (lineagePerson?.id === child.marriage.husbandId ? child.marriage.wife : child.marriage.husband)
-                : null;
-              const p = lineagePerson;
+              const p=child.person||child.marriage?.husband;
               if(!p) return null;
               return (
                 <div key={child.id} style={{display:"flex",alignItems:"center",gap:7,marginBottom:5}}>
                   <span style={{color:p.jenisKelamin==="LAKI_LAKI"?C.biru:C.pink,fontSize:"0.48rem"}}>◆</span>
                   <span style={{fontFamily:"'Cinzel',serif",fontSize:"0.68rem",color:C.kremT,flex:1}}>{p.nama}</span>
-                  {childSpouse&&<span style={{fontFamily:"'IM Fell English',serif",fontStyle:"italic",fontSize:"0.62rem",color:C.emasT}}>✦ {childSpouse.nama}</span>}
+                  {child.marriage&&<span style={{fontFamily:"'IM Fell English',serif",fontStyle:"italic",fontSize:"0.62rem",color:C.emasT}}>✦ {child.marriage.wife.nama}</span>}
                   {isAdmin&&isCouple&&(
                     <button
                       onClick={()=>setInsertBetweenTarget({personId:p.id,personNama:p.nama})}
@@ -1320,7 +1266,7 @@ function DetailPanel({ unit, allMarriages, descendantIds, onClose, isMobile, isA
 
         {/* Buttons — Profil */}
         <div style={{display:"flex",gap:8,marginTop:4}}>
-          {couplePeople.map((p,i)=>(
+          {(isCouple?[unit.marriage!.husband,unit.marriage!.wife]:[unit.person!]).map((p,i)=>(
             <Link key={i} href={`/profil/${p.id}`} style={{
               flex:1,fontFamily:"'Cinzel',serif",fontSize:"0.6rem",letterSpacing:"0.12em",textTransform:"uppercase",
               color:i===0?C.hitam:C.emas,
@@ -1329,14 +1275,14 @@ function DetailPanel({ unit, allMarriages, descendantIds, onClose, isMobile, isA
               padding:isMobile?"12px 6px":"10px 6px",textDecoration:"none",textAlign:"center",display:"block",
               clipPath:"polygon(6px 0%,100% 0%,calc(100% - 6px) 100%,0% 100%)",
             }}>
-              {isCouple?(i===0?"Profil Utama":"Profil Pasangan"):"Lihat Profil"}
+              {isCouple?(i===0?"Profil Suami":"Profil Istri"):"Lihat Profil"}
             </Link>
           ))}
         </div>
 
         {/* Fokus Silsilah */}
         {(() => {
-          const focusPerson = isCouple ? (lineagePriority?.primary ?? unit.marriage!.husband) : unit.person!;
+          const focusPerson = isCouple ? unit.marriage!.husband : unit.person!;
           return (
             <button onClick={()=>onFocus(focusPerson.id, focusPerson.nama)} style={{
               width:"100%",fontFamily:"'Cinzel',serif",fontSize:"0.58rem",letterSpacing:"0.14em",
@@ -1366,7 +1312,10 @@ function DetailPanel({ unit, allMarriages, descendantIds, onClose, isMobile, isA
 
             {/* Edit buttons */}
             <div style={{display:"flex",gap:6,marginBottom:6,flexWrap:"wrap"}}>
-              {couplePeople.map((p,i)=>(
+              {(isCouple
+                ? [unit.marriage!.husband, unit.marriage!.wife]
+                : [unit.person!]
+              ).map((p,i)=>(
                 <a
                   key={i}
                   href={`/admin/edit/${p.id}`}
@@ -1379,7 +1328,7 @@ function DetailPanel({ unit, allMarriages, descendantIds, onClose, isMobile, isA
                     transition:"all .2s",
                   }}
                 >
-                  {isCouple?(i===0?"Edit Utama":"Edit Pasangan"):"Edit Data"}
+                  {isCouple?(i===0?"Edit Suami":"Edit Istri"):"Edit Data"}
                 </a>
               ))}
             </div>
@@ -1419,7 +1368,10 @@ function DetailPanel({ unit, allMarriages, descendantIds, onClose, isMobile, isA
 
             {/* Hapus buttons */}
             <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-              {couplePeople.map((p,i)=>(
+              {(isCouple
+                ? [unit.marriage!.husband, unit.marriage!.wife]
+                : [unit.person!]
+              ).map((p,i)=>(
                 <button
                   key={i}
                   onClick={()=>onDelete(p.id, p.nama)}
@@ -1432,7 +1384,7 @@ function DetailPanel({ unit, allMarriages, descendantIds, onClose, isMobile, isA
                     transition:"all .2s",
                   }}
                 >
-                  {isCouple?(i===0?"Hapus Utama":"Hapus Pasangan"):"Hapus"}
+                  {isCouple?(i===0?"Hapus Suami":"Hapus Istri"):"Hapus"}
                 </button>
               ))}
             </div>
@@ -1444,9 +1396,7 @@ function DetailPanel({ unit, allMarriages, descendantIds, onClose, isMobile, isA
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
-function TaromboPageContent() {
-  const searchParams = useSearchParams();
-  
+export default function TaromboPage() {
   const [data,       setData]       = useState<TaromboData|null>(null);
   const [loading,    setLoading]    = useState(true);
   const [error,      setError]      = useState<string|null>(null);
@@ -1459,8 +1409,8 @@ function TaromboPageContent() {
   const [focusPId,        setFocusPId]        = useState<number|null>(null);
   const [focusPName,      setFocusPName]      = useState("");
   const [showHint,        setShowHint]        = useState(true);
-  const [generasiLimit,   setGenerasiLimit]   = useState<number | null>(5);
-  const [focusAncestorLimit, setFocusAncestorLimit] = useState<number | null>(5);
+  const [generationLimit, setGenerationLimit] = useState<number|null>(5);
+  const GENERATION_OPTIONS = [3, 5, 7] as const;
 
   const isPanning    = useRef(false);
   const lastMouse    = useRef({x:0,y:0});
@@ -1496,22 +1446,10 @@ function TaromboPageContent() {
       .finally(()=>setLoading(false));
   },[]);
 
-  useEffect(()=>{ fetchTarombo(); },[fetchTarombo]);
-
-  // Handle URL parameter focus (untuk link dari profil)
-  useEffect(() => {
-    const focusId = searchParams.get("focus");
-    if (focusId && data) {
-      const personId = parseInt(focusId, 10);
-      if (!isNaN(personId)) {
-        const person = data.allPersons.find(p => p.id === personId);
-        if (person) {
-          setFocusPId(personId);
-          setFocusPName(person.nama);
-        }
-      }
-    }
-  }, [searchParams, data]);
+  useEffect(()=>{
+    const t = setTimeout(()=>fetchTarombo(), 0);
+    return ()=>clearTimeout(t);
+  },[fetchTarombo]);
 
   // Hapus anggota dari pohon (admin only)
   async function handleDelete(id: number, nama: string) {
@@ -1532,22 +1470,24 @@ function TaromboPageContent() {
 
   const layout = useMemo(()=>{
     if (!data) return null;
-    const maxDepth = !focusPId ? generasiLimit : null;
-    return focusPId ? buildFocusLayout(data, focusPId, focusAncestorLimit) : buildLayout(data, maxDepth);
-  }, [data, focusPId, generasiLimit, focusAncestorLimit]);
-
-  const descendantIds = useMemo(() => {
-    if (!data) return new Set<number>();
-    return new Set(data.marriages.flatMap(m => m.children.map(c => c.personId)));
-  }, [data]);
+    const generationMap = buildGenerationMap(data);
+    const maxDepth = !focusPId ? generationLimit : null;
+    return focusPId
+      ? buildFocusLayout(data, generationMap, focusPId, generationLimit)
+      : buildLayout(data, generationMap, maxDepth);
+  }, [data, focusPId, generationLimit]);
 
   const hasTruncated = useMemo(()=>{
-    if (!layout || focusPId || generasiLimit === null) return false;
+    if (!layout || focusPId || generationLimit === null) return false;
     return layout.allUnits.some(u => u.truncated);
-  }, [layout, focusPId, generasiLimit]);
+  }, [layout, generationLimit, focusPId]);
 
   // Auto-fit saat mode fokus berubah
-  useEffect(()=>{ didFit.current=false; setSelected(null); }, [focusPId]);
+  useEffect(()=>{
+    didFit.current=false;
+    const t = setTimeout(()=>setSelected(null), 0);
+    return ()=>clearTimeout(t);
+  }, [focusPId]);
   const searchResults = useMemo(()=>{
     if (!data||!search.trim()) return [];
     return data.allPersons.filter(p=>p.nama.toLowerCase().includes(search.toLowerCase())).slice(0,8);
@@ -1562,10 +1502,9 @@ function TaromboPageContent() {
   const fitToScreen = useCallback(()=>{
     if (!layout||!containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
-    const fitFactor = isMobile ? 0.96 : 0.85;
-    const scale = Math.min(rect.width/layout.canvasW, rect.height/layout.canvasH, 1.2) * fitFactor;
+    const scale = Math.min(rect.width/layout.canvasW, rect.height/layout.canvasH, 1.2) * 0.85;
     setTransform({ scale, x:(rect.width-layout.canvasW*scale)/2, y:(rect.height-layout.canvasH*scale)/2 });
-  },[layout, isMobile]);
+  },[layout]);
 
   useEffect(()=>{ if(layout&&!didFit.current){ didFit.current=true; fitToScreen(); } },[layout,fitToScreen]);
 
@@ -1585,20 +1524,19 @@ function TaromboPageContent() {
     e.preventDefault();
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
-    const minScale = isMobile ? 0.35 : 0.15;
     
     // Posisi mouse relatif ke container
     const mouseX = e.clientX;
     const mouseY = e.clientY;
     
     setTransform(t => {
-      const newScale = Math.min(2.5, Math.max(minScale, t.scale * (e.deltaY > 0 ? 0.9 : 1.1)));
+      const newScale = Math.min(2.5, Math.max(0.15, t.scale * (e.deltaY > 0 ? 0.9 : 1.1)));
       // Zoom relatif ke posisi mouse
       const dx = mouseX - (mouseX - t.x) * (newScale / t.scale);
       const dy = mouseY - (mouseY - t.y) * (newScale / t.scale);
       return { scale: newScale, x: dx, y: dy };
     });
-  },[isMobile]);
+  },[]);
 
   // Touch — pan + pinch zoom
   const onTouchStart = useCallback((e:React.TouchEvent)=>{
@@ -1614,7 +1552,6 @@ function TaromboPageContent() {
 
   const onTouchMove = useCallback((e:React.TouchEvent)=>{
     e.preventDefault();
-    const minScale = isMobile ? 0.35 : 0.15;
     if (e.touches.length===1 && isPanning.current) {
       const dx=e.touches[0].clientX-lastTouchPos.current.x, dy=e.touches[0].clientY-lastTouchPos.current.y;
       lastTouchPos.current={x:e.touches[0].clientX,y:e.touches[0].clientY};
@@ -1629,16 +1566,24 @@ function TaromboPageContent() {
       const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
       
       setTransform(t => {
-        const newScale = Math.min(2.5, Math.max(minScale, t.scale * ratio));
+        const newScale = Math.min(2.5, Math.max(0.15, t.scale * ratio));
         // Zoom relatif ke center point
         const dx = centerX - (centerX - t.x) * (newScale / t.scale);
         const dy = centerY - (centerY - t.y) * (newScale / t.scale);
         return { scale: newScale, x: dx, y: dy };
       });
     }
-  },[isMobile]);
+  },[]);
 
   const onTouchEnd = useCallback(()=>{ isPanning.current=false; lastPinchD.current=null; },[]);
+
+  const handleZoomIn = useCallback(() => {
+    setTransform(t=>({...t,scale:Math.min(2.5,t.scale*1.2)}));
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    setTransform(t=>({...t,scale:Math.max(0.15,t.scale*.8)}));
+  }, []);
 
   const focusPerson = useCallback((person:Person)=>{
     if (!layout||!containerRef.current) return;
@@ -1649,9 +1594,8 @@ function TaromboPageContent() {
     setSelected(unit); setSearch(""); setShowSearch(false);
   },[layout]);
 
-  const minZoomScale = isMobile ? 0.35 : 0.15;
-  const focusBannerH = focusPId ? (isMobile ? 44 : 36) : hasTruncated ? (isMobile ? 44 : 36) : 0;
-  const topBarH = isMobile ? 60 : 64;
+  const focusBannerH = focusPId ? 36 : 36;
+  const topBarH = isMobile ? 56 : 64;
 
   return (
     <div style={{width:"100vw",height:"100vh",backgroundColor:C.hitam,overflow:"hidden",position:"relative",fontFamily:"'Cormorant Garamond',serif"}}>
@@ -1668,9 +1612,6 @@ function TaromboPageContent() {
         .ctrl-btn:hover{background:rgba(201,168,76,.14)!important;color:${C.emas}!important;border-color:rgba(201,168,76,.4)!important}
         .srch-item:hover{background:rgba(201,168,76,.07)!important;color:${C.emas}!important}
         .gorga-bg{background-image:repeating-linear-gradient(45deg,${C.emas} 0,${C.emas} 1px,transparent 0,transparent 50%),repeating-linear-gradient(-45deg,${C.emas} 0,${C.emas} 1px,transparent 0,transparent 50%);background-size:28px 28px}
-        @media (max-width:768px){
-          .mobile-hide{display:none!important}
-        }
       `}</style>
 
       <div className="gorga-bg" style={{position:"absolute",inset:0,opacity:.018,pointerEvents:"none"}}/>
@@ -1680,7 +1621,7 @@ function TaromboPageContent() {
         position:"absolute",top:0,left:0,right:0,height:topBarH,zIndex:20,
         background:`rgba(13,11,8,.97)`,borderBottom:`1px solid rgba(201,168,76,.14)`,
         display:"flex",alignItems:"center",justifyContent:"space-between",
-        padding:isMobile?"0 8px":"0 24px", gap:isMobile?6:8,
+        padding:isMobile?"0 10px":"0 24px", gap:8,
       }}>
         {/* Left */}
         <div style={{display:"flex",alignItems:"center",gap:isMobile?8:18,flex:1,minWidth:0,overflow:"hidden"}}>
@@ -1695,7 +1636,7 @@ function TaromboPageContent() {
 
           <h1 style={{
             fontFamily:"'Cinzel Decorative',cursive",
-            fontSize:isMobile?"0.72rem":"0.95rem",
+            fontSize:isMobile?"0.75rem":"0.95rem",
             color:C.emas,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",
           }}>
             Pohon <span style={{color:C.merahTerang}}>Silsilah</span>
@@ -1710,65 +1651,6 @@ function TaromboPageContent() {
 
         {/* Right */}
         <div style={{display:"flex",gap:8,alignItems:"center",flexShrink:0}}>
-          {!focusPId && (
-            <select
-              value={generasiLimit === null ? "all" : String(generasiLimit)}
-              onChange={(e) => {
-                const val = e.target.value;
-                setGenerasiLimit(val === "all" ? null : parseInt(val, 10));
-                setSelected(null);
-              }}
-              title="Filter jumlah generasi"
-              style={{
-                background:"rgba(30,26,20,.98)",
-                border:`1px solid rgba(201,168,76,.35)`,
-                color:C.kremT,
-                fontFamily:"'Cinzel',serif",
-                fontSize:isMobile?"0.56rem":"0.58rem",
-                letterSpacing:"0.1em",
-                textTransform:"uppercase",
-                padding:isMobile?"7px 8px":"7px 10px",
-                outline:"none",
-                maxWidth:isMobile?88:120,
-              }}
-            >
-              <option value="3">3 Gen</option>
-              <option value="5">5 Gen</option>
-              <option value="7">7 Gen</option>
-              <option value="10">10 Gen</option>
-              <option value="all">Semua</option>
-            </select>
-          )}
-
-          {focusPId && (
-            <select
-              value={focusAncestorLimit === null ? "all" : String(focusAncestorLimit)}
-              onChange={(e) => {
-                const val = e.target.value;
-                setFocusAncestorLimit(val === "all" ? null : parseInt(val, 10));
-                setSelected(null);
-              }}
-              title="Filter generasi ke atas saat mode fokus"
-              style={{
-                background:"rgba(30,26,20,.98)",
-                border:`1px solid rgba(201,168,76,.35)`,
-                color:C.kremT,
-                fontFamily:"'Cinzel',serif",
-                fontSize:isMobile?"0.56rem":"0.58rem",
-                letterSpacing:"0.1em",
-                textTransform:"uppercase",
-                padding:isMobile?"7px 8px":"7px 10px",
-                outline:"none",
-                maxWidth:isMobile?98:138,
-              }}
-            >
-              <option value="3">Atas 3 Gen</option>
-              <option value="5">Atas 5 Gen</option>
-              <option value="7">Atas 7 Gen</option>
-              <option value="all">Atas Semua</option>
-            </select>
-          )}
-
           {/* Mobile: icon search toggle */}
           {isMobile ? (
             <button onClick={()=>{ setShowSearch(s=>!s); setTimeout(()=>searchRef.current?.focus(),60); }}
@@ -1805,7 +1687,6 @@ function TaromboPageContent() {
 
           {isAdmin && (
             <Link href="/tambah" className="ctrl-btn" style={{
-              display:isMobile?"none":"inline-block",
               fontFamily:"'Cinzel',serif",fontSize:isMobile?"0.5rem":"0.6rem",
               letterSpacing:"0.15em",textTransform:"uppercase",
               color:C.hitam,
@@ -1824,7 +1705,6 @@ function TaromboPageContent() {
           )}
           {!isAdmin && (
             <Link href="/tambah" className="ctrl-btn" style={{
-              display:isMobile?"none":"inline-block",
               fontFamily:"'Cinzel',serif",fontSize:isMobile?"0.5rem":"0.6rem",
               letterSpacing:"0.15em",textTransform:"uppercase",color:C.kremT,
               textDecoration:"none",border:`1px solid rgba(201,168,76,.2)`,
@@ -1902,16 +1782,11 @@ function TaromboPageContent() {
                   stroke="rgba(201,168,76,0.45)" strokeWidth="1.6"
                   strokeDasharray={e.y1===e.y2?"6 4":undefined}/>
               ))}
-              {layout.allUnits.map(unit=> {
-                // Render polygamy card jika ada multiple marriages
-                if (unit.marriages && unit.marriages.length > 0) {
-                  return <PolygamyCard key={unit.id} unit={unit} selected={selected?.id===unit.id} onSelect={setSelected}/>;
-                }
-                // Render couple card atau single card
-                return unit.marriage
-                  ?<CoupleCard key={unit.id} unit={unit} selected={selected?.id===unit.id} onSelect={setSelected} descendantIds={descendantIds}/>
+              {layout.allUnits.map(unit=>
+                unit.marriage
+                  ?<CoupleCard key={unit.id} unit={unit} selected={selected?.id===unit.id} onSelect={setSelected}/>
                   :<SingleCard key={unit.id} unit={unit} selected={selected?.id===unit.id} onSelect={setSelected}/>
-              })}
+              )}
             </g>
           </svg>
         )}
@@ -1925,20 +1800,30 @@ function TaromboPageContent() {
         zIndex:20, display:"flex", flexDirection:"column", gap:6,
         transition:"bottom .3s",
       }}>
-        {[
-          {l:"+", fn:()=>setTransform(t=>({...t,scale:Math.min(2.5,t.scale*1.2)}))},
-          {l:"−", fn:()=>setTransform(t=>({...t,scale:Math.max(minZoomScale,t.scale*.8)}))},
-          {l:"⊡", fn:fitToScreen},
-        ].map(b=>(
-          <button key={b.l} className="ctrl-btn" onClick={b.fn} style={{
-            width:isMobile?44:38, height:isMobile?44:38,
-            background:"rgba(26,22,18,.96)", border:`1px solid rgba(201,168,76,.2)`,
-            color:C.kremT, fontSize:isMobile?"1.2rem":"1rem",
-            cursor:"pointer", transition:"all .2s",
-            display:"flex", alignItems:"center", justifyContent:"center",
-            fontFamily:"'Cinzel',serif", borderRadius:isMobile?6:0,
-          }}>{b.l}</button>
-        ))}
+        <button className="ctrl-btn" onClick={handleZoomIn} style={{
+          width:isMobile?44:38, height:isMobile?44:38,
+          background:"rgba(26,22,18,.96)", border:`1px solid rgba(201,168,76,.2)`,
+          color:C.kremT, fontSize:isMobile?"1.2rem":"1rem",
+          cursor:"pointer", transition:"all .2s",
+          display:"flex", alignItems:"center", justifyContent:"center",
+          fontFamily:"'Cinzel',serif", borderRadius:isMobile?6:0,
+        }}>+</button>
+        <button className="ctrl-btn" onClick={handleZoomOut} style={{
+          width:isMobile?44:38, height:isMobile?44:38,
+          background:"rgba(26,22,18,.96)", border:`1px solid rgba(201,168,76,.2)`,
+          color:C.kremT, fontSize:isMobile?"1.2rem":"1rem",
+          cursor:"pointer", transition:"all .2s",
+          display:"flex", alignItems:"center", justifyContent:"center",
+          fontFamily:"'Cinzel',serif", borderRadius:isMobile?6:0,
+        }}>−</button>
+        <button className="ctrl-btn" onClick={fitToScreen} style={{
+          width:isMobile?44:38, height:isMobile?44:38,
+          background:"rgba(26,22,18,.96)", border:`1px solid rgba(201,168,76,.2)`,
+          color:C.kremT, fontSize:isMobile?"1.2rem":"1rem",
+          cursor:"pointer", transition:"all .2s",
+          display:"flex", alignItems:"center", justifyContent:"center",
+          fontFamily:"'Cinzel',serif", borderRadius:isMobile?6:0,
+        }}>⊡</button>
       </div>
 
       {/* ── Legend ── */}
@@ -1954,7 +1839,7 @@ function TaromboPageContent() {
           transition:"right .3s",
         }}>
           {!isMobile&&<p style={{fontFamily:"'Cinzel',serif",fontSize:"0.54rem",letterSpacing:"0.25em",textTransform:"uppercase",color:C.emasT,marginBottom:10}}>Keterangan</p>}
-          {[{c:C.emas,l:"Keturunan (utama)"},{c:C.kremT,l:"Pasangan (sekunder)"},{c:C.emas,l:"✦ Ikatan Pasangan"}].map(i=>(
+          {[{c:C.biru,l:"Suami"},{c:C.pink,l:"Istri"},{c:C.emas,l:"✦ Pasangan"}].map(i=>(
             <div key={i.l} style={{display:"flex",alignItems:"center",gap:8,marginBottom:isMobile?4:6}}>
               <div style={{width:14,height:3,background:i.c,opacity:.8}}/>
               <span style={{fontFamily:"'Cinzel',serif",fontSize:isMobile?"0.52rem":"0.58rem",color:C.kremT,opacity:.75}}>{i.l}</span>
@@ -1967,16 +1852,41 @@ function TaromboPageContent() {
       )}
 
       {/* ── Generasi Banner ── */}
-      {hasTruncated && !focusPId && (
+      {!focusPId && (
         <div style={{
           position:"absolute", top:topBarH, left:0, right:0, zIndex:24,
           background:`rgba(13,11,8,.97)`, borderBottom:`1px solid rgba(201,168,76,.18)`,
-          padding:isMobile?"7px 10px":"7px 20px", display:"flex", alignItems:"center", gap:12,
+          padding:"7px 20px", display:"flex", alignItems:"center", gap:12,
           animation:"fadeIn .22s ease",
         }}>
-          <span style={{fontFamily:"'IM Fell English',serif",fontStyle:"italic",fontSize:isMobile?"0.68rem":"0.75rem",color:C.kremT,opacity:.82,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:isMobile?"normal":"nowrap",lineHeight:isMobile?1.35:1.2}}>
-            Menampilkan <span style={{color:C.emas,fontStyle:"normal"}}>{generasiLimit ?? "semua"} generasi</span> · Ubah filter generasi di kanan atas untuk memperluas tampilan
+          <span style={{fontFamily:"'IM Fell English',serif",fontStyle:"italic",fontSize:"0.75rem",color:C.kremT,opacity:.7,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+            Menampilkan <span style={{color:C.emas,fontStyle:"normal"}}>{generationLimit === null ? "semua generasi" : `${generationLimit} generasi pertama`}</span>
+            {hasTruncated ? " · Masih ada generasi yang tersembunyi" : ""}
           </span>
+          <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+            {GENERATION_OPTIONS.map(option => (
+              <button
+                key={option}
+                onClick={()=>setGenerationLimit(option)}
+                style={{
+                  fontFamily:"'Cinzel',serif",fontSize:"0.55rem",letterSpacing:"0.12em",textTransform:"uppercase",
+                  color:generationLimit===option?C.hitam:C.kremT,
+                  background:generationLimit===option?`linear-gradient(135deg,${C.emas},${C.emasM})`:"rgba(13,11,8,.5)",
+                  border:generationLimit===option?"none":`1px solid rgba(201,168,76,.25)`,
+                  padding:"5px 10px",cursor:"pointer",transition:"all .2s",whiteSpace:"nowrap",
+                }}
+              >
+                {option} Gen
+              </button>
+            ))}
+            <button onClick={()=>setGenerationLimit(null)} style={{
+              fontFamily:"'Cinzel',serif",fontSize:"0.55rem",letterSpacing:"0.12em",textTransform:"uppercase",
+              color:generationLimit===null?C.hitam:C.kremT,
+              background:generationLimit===null?`linear-gradient(135deg,${C.emas},${C.emasM})`:"rgba(13,11,8,.5)",
+              border:generationLimit===null?"none":`1px solid rgba(201,168,76,.25)`,
+              padding:"5px 10px",cursor:"pointer",transition:"all .2s",whiteSpace:"nowrap",
+            }}>Semua</button>
+          </div>
         </div>
       )}
 
@@ -1985,7 +1895,7 @@ function TaromboPageContent() {
         <div style={{
           position:"absolute", top:topBarH, left:0, right:0, zIndex:25,
           background:`rgba(92,14,14,.95)`, borderBottom:`1px solid rgba(201,168,76,.3)`,
-          padding:isMobile?"8px 10px":"8px 20px", display:"flex", alignItems:"center", gap:isMobile?8:12,
+          padding:"8px 20px", display:"flex", alignItems:"center", gap:12,
           animation:"fadeIn .22s ease",
         }}>
           <span style={{fontFamily:"'Cinzel',serif",fontSize:"0.55rem",letterSpacing:"0.18em",textTransform:"uppercase",color:C.emas,flexShrink:0}}>
@@ -1994,9 +1904,35 @@ function TaromboPageContent() {
           <span style={{fontFamily:"'Cinzel',serif",fontSize:"0.7rem",color:C.putih,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
             Silsilah: <span style={{color:C.emasM}}>{focusPName}</span>
           </span>
-          <span style={{fontFamily:"'IM Fell English',serif",fontStyle:"italic",fontSize:"0.72rem",color:C.kremT,opacity:.6,display:isMobile?"none":"block",flexShrink:0}}>
-            Menampilkan ke atas: {focusAncestorLimit ?? "semua"} generasi · tanpa saudara generasi atas
-          </span>
+          {!isMobile && (
+            <span style={{fontFamily:"'IM Fell English',serif",fontStyle:"italic",fontSize:"0.72rem",color:C.kremT,opacity:.6,flexShrink:0}}>
+              Menampilkan leluhur langsung {generationLimit===null?"(semua generasi atas)":`(${generationLimit} generasi atas)`}
+            </span>
+          )}
+          <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+            {GENERATION_OPTIONS.map(option => (
+              <button
+                key={option}
+                onClick={()=>setGenerationLimit(option)}
+                style={{
+                  fontFamily:"'Cinzel',serif",fontSize:"0.5rem",letterSpacing:"0.1em",textTransform:"uppercase",
+                  color:generationLimit===option?C.hitam:C.kremT,
+                  background:generationLimit===option?`linear-gradient(135deg,${C.emas},${C.emasM})`:"rgba(13,11,8,.5)",
+                  border:generationLimit===option?"none":`1px solid rgba(201,168,76,.25)`,
+                  padding:"4px 8px",cursor:"pointer",transition:"all .2s",whiteSpace:"nowrap",
+                }}
+              >
+                {option}
+              </button>
+            ))}
+            <button onClick={()=>setGenerationLimit(null)} style={{
+              fontFamily:"'Cinzel',serif",fontSize:"0.5rem",letterSpacing:"0.1em",textTransform:"uppercase",
+              color:generationLimit===null?C.hitam:C.kremT,
+              background:generationLimit===null?`linear-gradient(135deg,${C.emas},${C.emasM})`:"rgba(13,11,8,.5)",
+              border:generationLimit===null?"none":`1px solid rgba(201,168,76,.25)`,
+              padding:"4px 8px",cursor:"pointer",transition:"all .2s",whiteSpace:"nowrap",
+            }}>Semua</button>
+          </div>
           <button onClick={exitFocus} style={{
             fontFamily:"'Cinzel',serif",fontSize:"0.55rem",letterSpacing:"0.15em",textTransform:"uppercase",
             color:C.kremT,background:"rgba(13,11,8,.5)",border:`1px solid rgba(201,168,76,.25)`,
@@ -2004,28 +1940,6 @@ function TaromboPageContent() {
           }}>× Lihat Semua</button>
         </div>
       )}
-
-      {/* ── Mobile Quick Add ── */}
-      <Link href="/tambah" style={{
-        position:"absolute",
-        right:12,
-        bottom:isMobile&&selected ? "calc(68vh + 12px)" : 24,
-        zIndex:22,
-        display:isMobile ? "flex" : "none",
-        alignItems:"center",
-        justifyContent:"center",
-        width:44,
-        height:44,
-        borderRadius:999,
-        textDecoration:"none",
-        color:C.hitam,
-        fontFamily:"'Cinzel',serif",
-        fontSize:"1.15rem",
-        background:`linear-gradient(135deg,${C.emas},${C.emasM})`,
-        border:`1px solid rgba(13,11,8,.35)`,
-        boxShadow:"0 8px 18px rgba(0,0,0,.35)",
-        transition:"bottom .3s",
-      }}>+</Link>
 
       {/* ── UX Hint (dismissable) ── */}
       {showHint && !focusPId && !selected && (
@@ -2050,26 +1964,12 @@ function TaromboPageContent() {
       )}
 
       {/* ── Detail Panel ── */}
-      {selected&&data&&<DetailPanel unit={selected} allMarriages={data.marriages} descendantIds={descendantIds} onClose={()=>setSelected(null)} isMobile={isMobile} isAdmin={isAdmin} onDelete={handleDelete} onAddChildSuccess={fetchTarombo} onFocus={activateFocus}/>} 
+      {selected&&<DetailPanel unit={selected} onClose={()=>setSelected(null)} isMobile={isMobile} isAdmin={isAdmin} onDelete={handleDelete} onAddChildSuccess={fetchTarombo} onFocus={activateFocus}/>}
 
       {/* Ulos border */}
       <div style={{position:"absolute",bottom:0,left:0,right:0,height:4,zIndex:10,
         background:`repeating-linear-gradient(90deg,${C.merahTua} 0px,${C.merahTua} 20px,${C.emasT} 20px,${C.emasT} 28px,${C.hitam} 28px,${C.hitam} 36px,${C.emasT} 36px,${C.emasT} 44px,${C.merahTua} 44px,${C.merahTua} 64px)`
       }}/>
     </div>
-  );
-}
-
-
-// Wrap dengan Suspense untuk useSearchParams
-export default function TaromboPage() {
-  return (
-    <Suspense fallback={
-      <div style={{ minHeight: '100vh', background: '#0D0B08', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#C9A84C' }}>
-        <div style={{ fontFamily: "'Cinzel',serif", fontSize: '1rem' }}>Memuat...</div>
-      </div>
-    }>
-      <TaromboPageContent />
-    </Suspense>
   );
 }

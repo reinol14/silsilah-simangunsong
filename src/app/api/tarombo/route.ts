@@ -17,7 +17,7 @@ export async function GET() {
             person: true,
           },
           orderBy: [
-            { urutanAnak: "asc" } as any,
+            { urutanAnak: "asc" },
             { id: "asc" },
           ],
         },

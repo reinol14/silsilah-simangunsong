@@ -79,7 +79,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     // Prepare update data
-    const updateData: any = {
+    const updateData: { username: string; nama: string; password?: string } = {
       username,
       nama,
     };
